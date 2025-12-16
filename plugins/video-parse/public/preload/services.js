@@ -32,7 +32,7 @@ window.services = {
       if (!filename || filename === '/') {
         filename = Date.now().toString() + (type === 'video' ? '.mp4' : '.jpg');
       }
-      const filePath = path.join(window.utools.getPath('downloads'), filename);
+      const filePath = path.join(window.utools.dbStorage.getItem('downloadPath'), filename);
       
       const file = fs.createWriteStream(filePath);
       https.get(url, (response) => {

@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import Dialog from '../components/Dialog/index.vue';
+import Preference from '../components/Preference/index.vue';
 
 defineProps({
   enterAction: {
@@ -177,11 +179,30 @@ const parseInfo = async () => {
     detailInfo.value = info;
     currentTab.value = info.downloadUrl ? 'video' : 'pic';
     loading.value = false;
+    setHistory(content.value, info);
   } catch (e) {
     console.log(e.message);
     loading.value = false;
     showError(e.message);
   }
+}
+
+const MAX_HISTORY = 50;
+
+const setHistory = (content, info) => {
+  let list = window.utools.dbStorage.getItem('history') || [];
+  // content 去重
+  list = list.filter(item => item.content !== content);
+  // 新的放最前
+  list.unshift({
+    content: content,
+    data: info,
+    time: new Date().toLocaleString()
+  });
+  if (list.length > MAX_HISTORY) {
+    list = list.slice(0, MAX_HISTORY);
+  }
+  window.utools.dbStorage.setItem('history', list);
 }
 
 const showError = (message) => {
@@ -263,6 +284,16 @@ const copyAuthorUrl = () => {
     }
   }
 }
+
+const showDialog = ref(false);
+
+const handlerLoadData = (e) => {
+  const { content: ctx, data } = e;
+  detailInfo.value = data;
+  currentTab.value = data.downloadUrl ? 'video' : 'pic';
+  content.value = ctx;
+  showDialog.value = false;
+}
 </script>
 <template>
   <div class="main">
@@ -308,9 +339,9 @@ const copyAuthorUrl = () => {
             </span>
           </div>
         </div>
-        <!-- <button class="setting-btn">
+        <button class="setting-btn" @click="showDialog = true">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-5 h-5" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        </button> -->
+        </button>
       </div>
       <div class="right">
         <div class="detail-info" v-if="detailInfo">
@@ -405,6 +436,9 @@ const copyAuthorUrl = () => {
       {{ toast.message }}
     </div>
   </transition>
+  <Dialog width="360px" title="偏好" v-model:visible="showDialog" @confirm="showDialog = false" confirm-text="关闭">
+    <Preference @load-data="handlerLoadData" />
+  </Dialog>
 </template>
 <style lang="scss" scoped>
   $radius: 10px;
@@ -568,6 +602,10 @@ const copyAuthorUrl = () => {
     background-color: #1E293B;
     cursor: not-allowed;
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  .parse-btn:active {
+    transform: scale(0.98);
   }
 
   .video-wrapper {
@@ -848,44 +886,6 @@ const copyAuthorUrl = () => {
     color: #2151D1;
   }
 
-  .toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    border-radius: 5px;
-    color: white;
-    z-index: 1000;
-    font-size: 14px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  }
-
-  .toast-enter-active, .toast-leave-active {
-    transition: all 0.3s ease;
-  }
-
-  .toast-enter-from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  .toast-leave-to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  .toast.info {
-    background-color: #000000;// #3875F6
-  }
-
-  .toast.success {
-    background-color: #4B9E5F;
-  }
-
-  .toast.error {
-    background-color: #FF4D4F;
-  }
-
   .parse-tip {
     position: absolute;
     top: 2px;
@@ -895,3 +895,4 @@ const copyAuthorUrl = () => {
     font-size: 10px;
   }
 </style>
+

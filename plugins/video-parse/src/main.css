@@ -22,6 +22,44 @@ textarea {
   outline: none;
 }
 
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: white;
+    z-index: 1000;
+    font-size: 14px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .toast-enter-active, .toast-leave-active {
+    transition: all 0.3s ease;
+  }
+
+  .toast-enter-from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  .toast-leave-to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  .toast.info {
+    background-color: #000000;
+  }
+
+  .toast.success {
+    background-color: #4B9E5F;
+  }
+
+  .toast.error {
+    background-color: #FF4D4F;
+  }
+
 @media (prefers-color-scheme: light) {
   body {
     background-color: #f4f4f4;
