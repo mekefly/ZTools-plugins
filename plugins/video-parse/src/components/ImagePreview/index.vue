@@ -161,12 +161,12 @@ const playLivePhoto = async () => {
       <!-- pic cover -->
       <img v-if="type === 'pic' || type === 'cover'" :src="list[current]" alt="预览" class="preview-img" :style="{ transform: `translate(${imageX}px, ${imageY}px) scale(${scale}) rotate(${rotation}deg) scaleX(${mirror ? -1 : 1})`, transition: isDragging ? 'none' : 'transform .3s' }" @mousedown="startDrag" @mousemove="drag" @mouseup="stopDrag" @mouseleave="stopDrag">
       <!-- live -->
-      <video v-if="type === 'live'" id="livePhoto" :src="list[current]" alt="预览" class="preview-img" />
+      <video v-if="type === 'live'" id="livePhoto" :src="list[current]" alt="预览" />
       <div v-if="type === 'live'" class="live-control" @click.stop="playLivePhoto">
         Live
       </div>
       <!-- video -->
-      <video v-if="type === 'video'" :src="list[current]" alt="预览" class="preview-img preview-video" controls />
+      <video v-if="type === 'video'" :src="list[current]" alt="预览" class="preview-img preview-video" controls :style="{ transform: `translate(${imageX}px, ${imageY}px) scale(${scale}) rotate(${rotation}deg) scaleX(${mirror ? -1 : 1})`, transition: isDragging ? 'none' : 'transform .3s' }" @mousedown="startDrag" @mousemove="drag" @mouseup="stopDrag" @mouseleave="stopDrag" />
       <button class="close-btn" @click="closePreview">×</button>
       <button v-if="list.length > 1" class="nav-btn prev-btn" @click="prevImage">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -183,7 +183,7 @@ const playLivePhoto = async () => {
       </div>
       <!-- 工具条 -->
       <div class="toolbar">
-        <button v-if="type === 'pic' || type === 'cover'" class="tool-btn" @click="rotateImage" title="旋转">
+        <button class="tool-btn" @click="rotateImage" title="旋转">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
             <path d="M21 3v5h-5"/>
@@ -191,7 +191,7 @@ const playLivePhoto = async () => {
             <path d="M8 16H3v5"/>
           </svg>
         </button>
-        <button v-if="type === 'pic' || type === 'cover'" class="tool-btn" @click="mirrorImage" title="镜像">
+        <button class="tool-btn" @click="mirrorImage" title="镜像">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect width="20" height="14" x="2" y="3" rx="2"/>
             <line x1="2" x2="22" y1="9" y2="9"/>
