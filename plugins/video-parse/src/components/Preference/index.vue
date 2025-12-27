@@ -1,7 +1,14 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import showToast from '../../utils/toast';
 import packageJson from '../../../package';
+
+const props = defineProps({
+  showState: {
+    type: Boolean,
+    default: false
+  }
+});
 
 const emit = defineEmits(['loadData']);
 
@@ -12,6 +19,13 @@ const defaultPath = window.utools.getPath('downloads');
 const downloadPath = ref('');
 
 const currentTheme = ref('#0f172a');
+
+const chooseMenu = (menu) => {
+  if (menu === currentMenu.value) return;
+  if (menu === 'history') setHistory();
+  currentMenu.value = menu;
+  showConfirmPopover.value = false;
+};
 
 const onChange = () => {
   console.log(downloadPath.value);
@@ -75,6 +89,16 @@ const clearHistory = () => {
   showToast('已清空解析记录');
 };
 
+watch(() => props.showState, (newValue) => {
+  if (newValue && currentMenu.value === 'history') {
+    setHistory();
+  }
+})
+
+const setHistory = () => {
+  history.value = window.utools.dbStorage.getItem('history') || [];
+}
+
 const copyContent = (content) => {
   window.utools.copyText(content);
   showToast('已复制到剪贴板');
@@ -87,7 +111,7 @@ const version = ref(packageJson.version);
 onMounted(() => {
   downloadPath.value =
     window.utools.dbStorage.getItem('downloadPath') || defaultPath;
-  history.value = window.utools.dbStorage.getItem('history') || [];
+  setHistory();
   currentTheme.value = window.utools.dbStorage.getItem('theme') || '#0f172a';
   document.documentElement.style.setProperty('--primary-color', currentTheme.value);
 });
@@ -98,21 +122,21 @@ onMounted(() => {
       <div
         class="menu-item"
         :class="{ active: currentMenu === 'setting' }"
-        @click="currentMenu = 'setting'"
+        @click="chooseMenu('setting')"
       >
         偏好设置
       </div>
       <div
         class="menu-item"
         :class="{ active: currentMenu === 'about' }"
-        @click="currentMenu = 'about'"
+        @click="chooseMenu('about')"
       >
         关于应用
       </div>
       <div
         class="menu-item"
         :class="{ active: currentMenu === 'history' }"
-        @click="currentMenu = 'history'"
+        @click="chooseMenu('history')"
       >
         解析记录
       </div>
@@ -522,8 +546,8 @@ onMounted(() => {
     .content-tooltip {
       display: block;
       position: fixed;
-      bottom: 0;
-      right: 0;
+      bottom: 5px;
+      right: 5px;
       background-color: #fff;
       border-radius: 4px;
       z-index: 1;

@@ -241,9 +241,9 @@ const handlerLoadData = (e) => {
   setImageLoading(data);
 }
 
-// 判断数组对象内的某个属性值是否不为空
+// 判断数组对象内的某个属性和属性值是否不为空
 const isNotEmpty = (arr, key) => {
-  return arr.some(item => item[key] !== '');
+  return arr.some(item => (item[key] !== '' && item[key] !== null && item[key] !== undefined));
 }
 </script>
 <template>
@@ -352,7 +352,7 @@ const isNotEmpty = (arr, key) => {
   <!-- 图片预览模态框 -->
   <ImagePreview :visible="visible" :list="previewList" :type="type" :current="current" @next="$event => { current = $event }" @prev="$event => { current = $event }" @close="visible = false" />
   <Dialog width="360px" title="设置" v-model:visible="showDialog" @confirm="showDialog = false" confirm-text="关闭">
-    <Preference @load-data="handlerLoadData" />
+    <Preference @load-data="handlerLoadData" :show-state="showDialog" />
   </Dialog>
 </template>
 <style lang="scss" scoped>
