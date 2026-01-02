@@ -184,7 +184,9 @@ onMounted(() => {
         <div class="setting-item">
           <label for="theme">主题配色</label>
           <div class="theme-dots">
-            <div class="dot" v-for="(item, index) in themeList" :key="index" :class="{ active: currentTheme === item.color }" :style="{ background: item.color }" :title="item.name" @click="changeTheme(item.color)"></div>
+            <div class="dot" v-for="(item, index) in themeList" :key="index" :class="{ active: currentTheme === item.color }" :style="{ background: item.color }" :title="item.name" @click="changeTheme(item.color)">
+              {{ currentTheme === item.color ? '✓' : '' }}
+            </div>
             <input class="color-picker dot" type="color" :value="currentTheme" @change="changeTheme($event.target.value)" title="自定义颜色" />
           </div>
         </div>
@@ -353,6 +355,7 @@ onMounted(() => {
     border: 2px solid #fff;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     transition: transform 0.2s;
+    text-align: center;
   }
   .dot:hover {
     transform: scale(1.2);

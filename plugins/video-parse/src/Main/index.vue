@@ -241,15 +241,18 @@ const downloadAll = async () => {
     list = detailInfo.value.pics.map(item => item.url);
   }
   loadingAll.value = true;
+  let lastPic = '';
   for (let i = 0; i < list.length; i++) {
-    console.log(list[i]);
-    await window.services.downloadVideo(list[i], type === 'live' ? 'video' : 'pic', (downloaded, total) => {
+    lastPic = await window.services.downloadVideo(list[i], type === 'live' ? 'video' : 'pic', (downloaded, total) => {
       const progress = (downloaded / total) * 100;
-      showToast(`${i + 1}${type === 'live' ? 'Live图片' : '图片'}下载进度: ${progress.toFixed(0)}%`);
+      showToast(`${type === 'live' ? 'Live图片' : '图片'} ${i + 1} 下载进度: ${progress.toFixed(0)}%`);
     }, i + 1);
   }
   showToast('下载成功');
   loadingAll.value = false;
+  if (getAutoOpenConfig()) {
+    window.utools.shellShowItemInFolder(lastPic);
+  }
 }
 
 const copyAuthorUrl = () => {
@@ -275,6 +278,7 @@ const handlerLoadData = (e) => {
 
 // 判断数组对象内的某个属性和属性值是否不为空
 const isNotEmpty = (arr, key) => {
+  if (!Array.isArray(arr)) return false;
   return arr.some(item => (item[key] !== '' && item[key] !== null && item[key] !== undefined));
 }
 </script>
@@ -326,6 +330,17 @@ const isNotEmpty = (arr, key) => {
         <button class="setting-btn" @click="showDialog = true">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-5 h-5" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         </button>
+        <div class="left-top">
+          <button v-if="isNotEmpty(detailInfo?.pics, 'url') || isNotEmpty(detailInfo?.pics, 'livePhotoUrl')" :disabled="loadingAll" class="left-top-item" @click="downloadAll()" title="下载全部图片/Live照片">
+            <svg v-if="!loadingAll" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7,10 12,15 17,10"/>
+              <line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            <svg v-else t="1765683055654" class="icon loading" viewBox="0 0 1024 1024" fill="currentColor" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="12849" width="15" height="15"><path d="M469.333333 128a42.666667 42.666667 0 0 1 42.666667-42.666667c235.648 0 426.666667 191.018667 426.666667 426.666667a42.666667 42.666667 0 1 1-85.333334 0 341.333333 341.333333 0 0 0-341.333333-341.333333 42.666667 42.666667 0 0 1-42.666667-42.666667z" p-id="12850"></path></svg>
+            {{ loadingAll ? '下载中...' : '下载全部' }}
+          </button>
+        </div>
       </div>
       <div class="right">
         <div class="detail-info" v-if="detailInfo">
@@ -360,15 +375,6 @@ const isNotEmpty = (arr, key) => {
                 <div v-show="imageTab === 'live' && isNotEmpty(detailInfo.pics, 'url')" class="live-photo-item" @click="switchImageTab('pic')">Live</div>
                 <div v-show="imageTab === 'pic' && isNotEmpty(detailInfo.pics, 'livePhotoUrl')" class="live-photo-item" @click="switchImageTab('live')">Photo</div>
               </div>
-              <button v-if="isNotEmpty(detailInfo.pics, 'url') || isNotEmpty(detailInfo.pics, 'livePhotoUrl')" :disabled="loadingAll" class="left-top-item" @click="downloadAll()">
-                <svg v-if="!loadingAll" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7,10 12,15 17,10"/>
-                  <line x1="12" x2="12" y1="15" y2="3"/>
-                </svg>
-                <svg v-else t="1765683055654" class="icon loading" viewBox="0 0 1024 1024" fill="currentColor" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="12849" width="15" height="15"><path d="M469.333333 128a42.666667 42.666667 0 0 1 42.666667-42.666667c235.648 0 426.666667 191.018667 426.666667 426.666667a42.666667 42.666667 0 1 1-85.333334 0 341.333333 341.333333 0 0 0-341.333333-341.333333 42.666667 42.666667 0 0 1-42.666667-42.666667z" p-id="12850"></path></svg>
-                {{ loadingAll ? '下载中...' : '全部保存' }}
-              </button>
             </div>
           </div>
           <!-- 封面 -->
@@ -482,7 +488,7 @@ const isNotEmpty = (arr, key) => {
       }
 
       .parse-info {
-        height: 200px;
+        max-height: 190px;
         overflow: auto;
 
         .copy-icon {
@@ -501,6 +507,37 @@ const isNotEmpty = (arr, key) => {
             height: 30px;
             border-radius: 50%;
           }
+        }
+      }
+
+      .left-top {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+
+        .left-top-item {
+          background-color: var(--primary-color);
+          color: #fff;
+          border-radius: 4px;
+          font-size: 12px;
+          padding: 5px 8px;
+          cursor: pointer;
+          transition: all .3s;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          transition: opacity 0.3s;
+          border: none;
+        }
+
+        .left-top-item:hover {
+          opacity: 0.9;
+        }
+
+        .left-top-item:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+          color: rgba(255, 255, 255, 0.7);
         }
       }
     }
@@ -528,50 +565,19 @@ const isNotEmpty = (arr, key) => {
         gap: 10px;
       }
 
-      .left-top {
+      .live-photo {
+        display: flex;
+        font-size: 12px;
         position: absolute;
         top: 5px;
         left: 5px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
 
-        .live-photo {
-          display: flex;
-          font-size: 12px;
-
-          .live-photo-item {
-            padding: 4px 8px;
-            background-color: rgba(0, 0, 0, 1);
-            color: #fff;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-        }
-
-        .left-top-item {
+        .live-photo-item {
+          padding: 4px 8px;
           background-color: rgba(0, 0, 0, 1);
           color: #fff;
           border-radius: 4px;
-          font-size: 12px;
-          padding: 4px 8px;
           cursor: pointer;
-          transition: all .3s;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          transition: opacity 0.3s;
-          border: none;
-        }
-
-        .left-top-item:hover {
-          opacity: 0.9;
-        }
-
-        .left-top-item:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-          color: rgba(255, 255, 255, 0.7);
         }
       }
     }
