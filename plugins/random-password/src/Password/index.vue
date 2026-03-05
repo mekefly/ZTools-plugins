@@ -10,6 +10,7 @@ import {
   NInput,
   NInputNumber,
   NSlider,
+  NSwitch,
   NTag,
   useOsTheme,
   type GlobalThemeOverrides
@@ -23,6 +24,7 @@ interface PasswordSettings {
   useSymbols: boolean
   symbolChars: string
   excludeAmbiguous: boolean
+  enableSystemTip: boolean
 }
 
 defineProps<{ enterAction: unknown }>()
@@ -45,7 +47,8 @@ const defaultSettings: PasswordSettings = {
   useDigits: true,
   useSymbols: true,
   symbolChars: DEFAULT_SYMBOL_CHARS,
-  excludeAmbiguous: true
+  excludeAmbiguous: true,
+  enableSystemTip: true
 }
 
 const settings = reactive<PasswordSettings>({ ...defaultSettings })
@@ -366,13 +369,22 @@ function loadSettings(): void {
       typeof stored.excludeAmbiguous === 'boolean'
         ? stored.excludeAmbiguous
         : defaultSettings.excludeAmbiguous
+    settings.enableSystemTip =
+      typeof stored.enableSystemTip === 'boolean'
+        ? stored.enableSystemTip
+        : defaultSettings.enableSystemTip
   } catch {
     settings.length = defaultSettings.length
     settings.symbolChars = defaultSettings.symbolChars
+    settings.enableSystemTip = defaultSettings.enableSystemTip
   }
 }
 
 function showTip(message: string): void {
+  if (!settings.enableSystemTip) {
+    return
+  }
+
   const ztoolsApi = getZtoolsApi()
   const maybeShowTip = (ztoolsApi as any)?.showTip
   if (typeof maybeShowTip === 'function') {
@@ -448,6 +460,14 @@ function calculateStrengthScore(length: number, typeCount: number): number {
               <n-button class="generate-btn" type="primary" size="medium" :disabled="!canGenerate" @click="generatePassword">
                 生成密码
               </n-button>
+            </div>
+
+            <div class="row row-system-tip">
+              <span class="field-label">系统消息提示</span>
+              <div class="tip-switch-wrap">
+                <n-switch v-model:value="settings.enableSystemTip" size="small" />
+                <span class="tip-switch-text">{{ settings.enableSystemTip ? '已开启' : '已关闭' }}</span>
+              </div>
             </div>
 
             <n-alert v-if="!canGenerate" type="warning" :show-icon="false" class="status-alert">
@@ -580,8 +600,24 @@ function calculateStrengthScore(length: number, typeCount: number): number {
   justify-content: space-between;
 }
 
+.row-system-tip {
+  justify-content: space-between;
+}
+
 .check-item-inline {
   font-size: 12px;
+}
+
+.tip-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tip-switch-text {
+  color: var(--rp-text-soft);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .generate-btn {

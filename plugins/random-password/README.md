@@ -1,281 +1,140 @@
 # random-password
 
-> 轻量随机密码插件，快速生成安全密码
+轻量的 ZTools 随机密码插件，支持按规则生成高强度密码并自动复制到剪贴板。
 
-这是一个使用 **Vue 3 + Vite + TypeScript** 构建的 ZTools 插件。
+## 项目简介
 
-## ✨ 功能特性
+`random-password` 使用 `Vue 3 + TypeScript + Vite + Naive UI` 开发，面向 ZTools 插件场景。
 
-### 📌 已包含的示例功能
+当前插件只包含一个功能入口：
 
-- **Hello** - 基础功能指令示例
-  - 触发指令：`你好` / `hello`
-  - 展示简单的 Vue 组件界面
+- 功能编码：`password`
+- 触发指令：`随机密码` / `password` / `pwd`
 
-- **读文件** - 文件读取功能示例
-  - 功能指令：`读文件`
-  - 匹配指令：支持拖拽文件触发
-  - 演示如何使用 Node.js 能力读取文件内容
+## 功能特性
 
-- **保存为文件** - 文件写入功能示例
-  - 匹配指令：任意文本/图片 → `保存为文件`
-  - 演示如何将剪贴板内容保存为文件
+- 支持密码长度设置（`8` 到 `64`）
+- 支持字符类型组合：大写、小写、数字、符号
+- 支持自定义符号集（默认 `!@#$%^&`）
+- 支持排除易混淆字符（`O/0/I/l/1`）
+- 强度实时评估（弱 / 中 / 强）
+- 生成后自动复制，失败时可手动复制
+- 设置自动持久化（ZTools 环境下用 `dbStorage`，Web 预览下回退到 `localStorage`）
+- 亮色/暗色主题自适应
 
-## 📁 项目结构
+## 安全实现说明
 
-```
+- 使用 `crypto.getRandomValues` 生成随机数
+- 通过 rejection sampling 避免取模偏差
+- 生成逻辑保证每个启用的字符类型至少出现一次
+
+## 技术栈
+
+- Vue 3
+- TypeScript
+- Vite
+- Naive UI
+- `@ztools-center/ztools-api-types`
+
+## 目录结构
+
+```text
 .
 ├── public/
-│   ├── logo.png              # 插件图标
-│   ├── plugin.json           # 插件配置文件
-│   └── preload/              # Preload 脚本目录
-│       ├── package.json      # Preload 依赖配置
-│       └── services.js       # Node.js 能力扩展
+│   ├── logo-v2.png
+│   └── plugin.json
 ├── src/
-│   ├── main.ts               # 入口文件
-│   ├── main.css              # 全局样式
-│   ├── App.vue               # 根组件
-│   ├── env.d.ts              # 类型声明
-│   ├── Hello/                # Hello 功能组件
-│   │   └── index.vue
-│   ├── Read/                 # 读文件功能组件
-│   │   └── index.vue
-│   └── Write/                # 写文件功能组件
-│       └── index.vue
-├── index.html                # HTML 模板
-├── vite.config.js            # Vite 配置
-├── tsconfig.json             # TypeScript 配置
-├── package.json              # 项目依赖
-└── README.md                 # 项目文档
+│   ├── Password/
+│   │   └── index.vue        # 密码生成核心页面与逻辑
+│   ├── App.vue              # 插件入口，监听 onPluginEnter/onPluginOut
+│   ├── env.d.ts             # ZTools API 类型声明
+│   ├── main.css
+│   └── main.ts
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.js
+└── README.md
 ```
 
-## 🚀 快速开始
+## 开发与构建
 
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 开发模式
+### 2. 本地开发（Web 预览）
 
 ```bash
 npm run dev
 ```
 
-开发服务器将在 `http://localhost:5173` 启动。ZTools 会自动加载开发版本。
+默认地址：`http://localhost:5173`
 
-### 构建生产版本
+说明：
 
-```bash
-npm run build
-```
+- 在纯 Web 环境下，插件会走降级逻辑（无 `window.ztools`）
+- 可以完整验证生成规则、强度评估、主题切换和本地存储
 
-构建产物将输出到 `dist/` 目录。
-
-## 📖 开发指南
-
-### 1. 修改插件配置
-
-编辑 `public/plugin.json` 文件：
-
-```json
-{
-  "name": "你的插件名称",
-  "description": "插件描述",
-  "author": "作者名称",
-  "version": "1.0.0",
-  "features": [
-    // 添加你的功能配置
-  ]
-}
-```
-
-### 2. 创建新功能
-
-#### 步骤 1: 创建 Vue 组件
-
-在 `src/` 目录下创建新的功能组件：
-
-```vue
-<!-- src/MyFeature/index.vue -->
-<template>
-  <div class="my-feature">
-    <h1>{{ title }}</h1>
-    <!-- 你的组件内容 -->
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const title = ref('我的新功能')
-</script>
-
-<style scoped>
-.my-feature {
-  padding: 20px;
-}
-</style>
-```
-
-#### 步骤 2: 注册路由
-
-在 `src/App.vue` 中添加路由：
-
-```vue
-<script setup lang="ts">
-import MyFeature from './MyFeature/index.vue'
-
-const routes = {
-  hello: Hello,
-  read: Read,
-  write: Write,
-  myfeature: MyFeature // 添加新路由
-}
-</script>
-```
-
-#### 步骤 3: 配置功能
-
-在 `plugin.json` 中添加功能配置：
-
-```json
-{
-  "code": "myfeature",
-  "explain": "我的新功能",
-  "icon": "logo.png",
-  "cmds": ["触发指令"]
-}
-```
-
-### 3. 使用 Node.js 能力
-
-#### 扩展 Preload 服务
-
-编辑 `public/preload/services.js`：
-
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-module.exports = {
-  // 示例：读取文件
-  readFile: (filePath) => {
-    return fs.readFileSync(filePath, 'utf-8')
-  },
-
-  // 添加你的服务
-  myService: (params) => {
-    // 实现你的逻辑
-    return result
-  }
-}
-```
-
-#### 在 Vue 组件中调用
-
-```vue
-<script setup lang="ts">
-const handleRead = async () => {
-  try {
-    const content = await window.services.readFile('/path/to/file')
-    console.log(content)
-  } catch (error) {
-    console.error('读取失败:', error)
-  }
-}
-</script>
-```
-
-### 4. 使用 ZTools API
-
-```vue
-<script setup lang="ts">
-// 获取剪贴板内容
-const text = await window.ztools.getClipboardContent()
-
-// 隐藏主窗口
-window.ztools.hideMainWindow()
-
-// 显示提示
-window.ztools.showTip('操作成功')
-
-// 更多 API 请参考官方文档
-</script>
-```
-
-## 🎨 样式开发
-
-### 使用 CSS 变量
-
-ZTools 提供了一套 CSS 变量用于主题适配：
-
-```css
-.my-component {
-  background: var(--bg-color);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-}
-```
-
-### 暗色模式支持
-
-```css
-@media (prefers-color-scheme: dark) {
-  .my-component {
-    /* 暗色模式样式 */
-  }
-}
-```
-
-## 📦 构建与发布
-
-### 1. 构建插件
+### 3. 构建
 
 ```bash
 npm run build
 ```
 
-### 2. 测试构建产物
+构建产物输出到 `dist/`。
 
-将 `dist/` 目录中的所有文件复制到 ZTools 插件目录进行测试。
+## 在 ZTools 中调试
 
-### 3. 发布到插件市场
+`public/plugin.json` 已配置开发入口：
 
-1. 确保 `plugin.json` 中的信息完整准确
-2. 准备好插件截图和详细说明
-3. 访问 ZTools 插件市场提交插件
+```json
+"development": {
+  "main": "http://localhost:5173"
+}
+```
 
-## 📚 相关资源
+建议流程：
 
-- [ZTools 官方文档](https://github.com/ztool-center/ztools)
-- [ZTools API 文档](https://github.com/ztool-center/ztools-api-types)
-- [Vue 3 文档](https://vuejs.org/)
-- [Vite 文档](https://vitejs.dev/)
+1. 启动 `npm run dev`
+2. 在 ZTools 中加载本插件目录
+3. 通过 `随机密码` / `password` / `pwd` 触发插件
+4. 验证自动复制与通知提示是否正常
 
-## ❓ 常见问题
+## 插件配置
 
-### Q: 如何调试插件？
+核心配置位于 [public/plugin.json](./public/plugin.json)：
 
-A: 使用 `npm run dev` 启动开发服务器，在插件界面中点击插件头像图标，在弹出的菜单中选择"打开开发者工具"进行调试。
+- 元信息：`name`、`title`、`description`、`author`、`version`
+- 主入口：`main`
+- 功能列表：`features`
 
-### Q: 如何访问 Node.js 能力？
+如果你调整了命令词或功能编码，请同步检查：
 
-A: 通过 `public/preload/services.js` 文件扩展服务，然后在组件中使用 `window.services` 调用。
+- `public/plugin.json` 中的 `features[].code` / `cmds`
+- [src/App.vue](./src/App.vue) 中的路由分发逻辑
 
-### Q: 插件图标不显示？
+## 常见问题
 
-A: 确保 `public/logo.png` 文件存在，且在 `plugin.json` 中正确配置了 `logo` 字段。
+### 1. 生成成功但没有复制
 
-### Q: 如何处理大文件上传？
+- 可能是当前环境不支持或禁止剪贴板访问
+- 插件已提供“手动复制”按钮作为兜底
 
-A: 建议使用 Node.js 流式处理，在 preload 脚本中实现文件分块处理逻辑。
+### 2. 为什么在浏览器里也能跑
 
-## 📄 开源协议
+`App.vue` 会检测 `window.ztools` 是否存在：
 
-MIT License
+- 存在：走 ZTools 生命周期（`onPluginEnter` / `onPluginOut`）
+- 不存在：自动进入 `password` 页面，方便本地调试
 
----
+### 3. 设置保存在哪里
 
-**祝你开发愉快！** 🎉
+- ZTools 环境：`ztools.dbStorage`
+- Web 环境：`localStorage`（key 为 `random-password:settings:web`）
+
+## License
+
+MIT
