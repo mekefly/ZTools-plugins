@@ -193,10 +193,6 @@ let scrollTimeout: ReturnType<typeof setTimeout> | null = null
 
 const scrollToCell = (row: number, col: number) => {
     activeCell.value = { row, col }
-    const source = sourceTableRef.value
-    const target = targetTableRef.value
-    const unified = unifiedTableRef.value
-    const diffBar = diffBarRef.value
 
     isProgrammaticScroll = true
     if (scrollTimeout) clearTimeout(scrollTimeout)
@@ -204,36 +200,21 @@ const scrollToCell = (row: number, col: number) => {
         isProgrammaticScroll = false
     }, 1000)
 
-    const scrollContainerToElement = (containerId: 'source' | 'target' | 'unified', elId: string) => {
-        const container = containerId === 'unified' ? unified : (containerId === 'source' ? source : target)
-        if (!container) return
-        const el = document.getElementById(elId)
-        if (!el) return
+    // 使用 requestAnimationFrame，把多次滚动合并到同一帧，减少抖动
+    requestAnimationFrame(() => {
+        if (viewMode.value === 'split') {
+            const sourceEl = document.getElementById(`cell-source-${row}-${col}`)
+            const targetEl = document.getElementById(`cell-target-${row}-${col}`)
+            const diffRowEl = document.getElementById(`diff-row-${row}`)
 
-        let targetTop = el.offsetTop
-        let targetLeft = el.offsetLeft
-
-        // Center the matched cell in the viewport
-        targetTop -= container.clientHeight / 2 - el.clientHeight / 2
-        targetLeft -= container.clientWidth / 2 - el.clientWidth / 2
-
-        const safeTop = Math.max(0, targetTop)
-        const safeLeft = Math.max(0, targetLeft)
-
-        container.scrollTo({ top: safeTop, left: safeLeft, behavior: 'smooth' })
-
-        // If in split mode and we just calculated the source or target, sync the others
-        if (viewMode.value === 'split' && containerId === 'source') {
-            if (target) target.scrollTo({ top: safeTop, left: safeLeft, behavior: 'smooth' })
-            if (diffBar) diffBar.scrollTo({ top: safeTop, behavior: 'smooth' })
+            sourceEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            targetEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            diffRowEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        } else {
+            const unifiedEl = document.getElementById(`cell-unified-${row}-${col}`)
+            unifiedEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
-    }
-
-    if (viewMode.value === 'split') {
-        scrollContainerToElement('source', `cell-source-${row}-${col}`)
-    } else {
-        scrollContainerToElement('unified', `cell-unified-${row}-${col}`)
-    }
+    })
 }
 
 const goToNextDiff = () => {
@@ -544,7 +525,7 @@ const getRowDiff = (row: number) => {
                                             :class="getCellClass(r - 1, c - 1, 'source')">
                                             <div class="cell-content">
                                                 <span class="val-plain">{{ currentSheetDiff.sourceData[r - 1]?.[c - 1]
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -621,7 +602,7 @@ const getRowDiff = (row: number) => {
                                                         }}</span>
                                                 </div>
                                                 <div class="mt-1 text-[10px] opacity-50">{{ getRowDiff(r - 1)?.address
-                                                    }}
+                                                }}
                                                 </div>
                                             </div>
                                         </template>
@@ -649,7 +630,7 @@ const getRowDiff = (row: number) => {
                                             :class="getCellClass(r - 1, c - 1, 'target')">
                                             <div class="cell-content">
                                                 <span class="val-plain">{{ currentSheetDiff.targetData[r - 1]?.[c - 1]
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </td>
                                     </tr>
