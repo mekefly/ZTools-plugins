@@ -111,3 +111,63 @@ body {
 .font-mono {
   font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
 }
+
+// 基础隐藏滚动条类（保留滚动功能）
+.scrollbar-hide {
+  // 针对 Webkit 内核浏览器（Chrome/Safari/Opera）
+  -webkit-overflow-scrolling: touch; // 保留移动端弹性滚动
+  &::-webkit-scrollbar {
+    display: none !important; // 隐藏滚动条
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  // 针对 IE/Edge 浏览器
+  -ms-overflow-style: none !important;
+
+  // 针对 Firefox 浏览器
+  scrollbar-width: none !important;
+
+  // 兜底：防止部分浏览器样式穿透
+  overflow: -moz-scrollbars-none !important;
+}
+
+// 仅隐藏横向滚动条
+.scrollbar-hide-x {
+  overflow-x: auto !important;
+  
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  
+  &::-webkit-scrollbar {
+    height: 0 !important;
+    display: none !important;
+  }
+}
+
+// 仅隐藏纵向滚动条
+.scrollbar-hide-y {
+  overflow-y: auto !important;
+  
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  
+  &::-webkit-scrollbar {
+    width: 0 !important;
+    display: none !important;
+  }
+}
+
+// 可选：恢复滚动条的类（用于切换场景）
+.scrollbar-show {
+  -webkit-overflow-scrolling: auto;
+  &::-webkit-scrollbar {
+    display: auto !important;
+    width: auto !important;
+    height: auto !important;
+  }
+  
+  -ms-overflow-style: auto !important;
+  scrollbar-width: auto !important;
+  overflow: auto !important;
+}

@@ -6,6 +6,8 @@ import ZBadge from '@/components/ui/base/ZBadge.vue'
 import ZButton from '@/components/ui/base/ZButton.vue'
 import ZTooltip from '@/components/ui/base/ZTooltip.vue'
 import ZSelect from '@/components/ui/base/ZSelect.vue'
+import FileDropzone from '@/components/shared/FileDropzone.vue'
+import DiffLegend from '@/components/shared/DiffLegend.vue'
 import { normalizeString } from '@/utils/string'
 
 const { t } = useI18n()
@@ -236,20 +238,14 @@ const scrollToCell = (row: number, col: number) => {
 
 const goToNextDiff = () => {
     if (!currentSheetDiff.value || !currentSheetDiff.value.diffs.length) return
+    // 获取所有差异块的索引
     const diffs = currentSheetDiff.value.diffs
     const currentIndex = activeCell.value ? diffs.findIndex(d => d.row === activeCell.value?.row && d.col === activeCell.value?.col) : -1
+    // 获取下一个差异块的索引
     const nextIndex = (currentIndex + 1) % diffs.length
+    // 获取下一个差异块
     const nextDiff = diffs[nextIndex]
     scrollToCell(nextDiff.row, nextDiff.col)
-}
-
-const goToPrevDiff = () => {
-    if (!currentSheetDiff.value || !currentSheetDiff.value.diffs.length) return
-    const diffs = currentSheetDiff.value.diffs
-    const currentIndex = activeCell.value ? diffs.findIndex(d => d.row === activeCell.value?.row && d.col === activeCell.value?.col) : -1
-    const prevIndex = currentIndex <= 0 ? diffs.length - 1 : currentIndex - 1
-    const prevDiff = diffs[prevIndex]
-    scrollToCell(prevDiff.row, prevDiff.col)
 }
 
 let activeScrollTarget: HTMLElement | null = null
@@ -358,7 +354,8 @@ const getRowDiff = (row: number) => {
         <div
             class="h-14 border-b border-[var(--color-border)] bg-[var(--color-background)] flex items-center justify-between px-5 flex-shrink-0 z-30 shadow-sm relative w-full">
             <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 transition-opacity" :class="{ 'opacity-50 pointer-events-none': !bothLoaded }">
+                <div class="flex items-center gap-2 transition-opacity"
+                    :class="{ 'opacity-50 pointer-events-none': !bothLoaded }">
                     <ZBadge variant="surface" size="lg">{{ t('sheet') }}</ZBadge>
                     <ZSelect v-model="selectedSheetName" :options="sheetOptions" class="min-w-[140px]"
                         :disabled="!bothLoaded" />
@@ -371,8 +368,9 @@ const getRowDiff = (row: number) => {
                         :class="{ 'opacity-50 pointer-events-none': !bothLoaded }">
                         <ZButton :variant="viewMode === 'split' ? 'primary' : 'surface'" size="sm"
                             @click="viewMode = 'split'" class="!rounded-md">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round">
                                 <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
                                 <line x1="12" y1="3" x2="12" y2="21" />
                             </svg>
@@ -380,8 +378,9 @@ const getRowDiff = (row: number) => {
                         </ZButton>
                         <ZButton :variant="viewMode === 'unified' ? 'primary' : 'surface'" size="sm"
                             @click="viewMode = 'unified'" class="!rounded-md">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round">
                                 <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
                             </svg>
                             {{ t('viewUnified') }}
@@ -389,7 +388,8 @@ const getRowDiff = (row: number) => {
                     </div>
                 </div>
 
-                <div class="h-4 w-px bg-[var(--color-border)] mx-1" v-if="currentSheetDiff && currentSheetDiff.diffs.length"></div>
+                <div class="h-4 w-px bg-[var(--color-border)] mx-1"
+                    v-if="currentSheetDiff && currentSheetDiff.diffs.length"></div>
 
                 <div class="flex items-center gap-1" v-if="currentSheetDiff && currentSheetDiff.diffs.length">
                     <ZBadge variant="primary" size="lg"
@@ -421,52 +421,34 @@ const getRowDiff = (row: number) => {
 
             <!-- DROPZONES -->
             <div v-if="!bothLoaded" class="h-full flex gap-4 p-5">
-                <div
-                    class="flex-1 border-2 border-dashed border-[var(--color-border)] rounded-xl flex flex-col items-center justify-center bg-checker relative group hover:border-[var(--color-cta)] transition-all">
-                    <input type="file" accept=".xlsx,.xls,.csv" class="absolute inset-0 opacity-0 cursor-pointer z-10"
-                        multiple @change="handleFile($event, 'source')" />
-                    <div class="text-center p-8 pointer-events-none group-hover:scale-105 transition-transform">
-                        <div
-                            class="w-14 h-14 bg-[var(--color-background)] rounded-xl flex items-center justify-center mb-3 mx-auto border border-[var(--color-border)] shadow-sm text-green-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <path d="M8 13h2" />
-                                <path d="M8 17h2" />
-                                <path d="M14 13h2" />
-                                <path d="M14 17h2" />
-                            </svg>
-                        </div>
-                        <p class="text-sm font-bold">{{ t('excelSource') }}</p>
-                        <p class="text-xs text-[var(--color-secondary)] mt-1 opacity-70">{{ sourceWorkbook ? 'Ready' :
-                            t('uploadExcel') }}</p>
-                    </div>
-                </div>
-                <div
-                    class="flex-1 border-2 border-dashed border-[var(--color-border)] rounded-xl flex flex-col items-center justify-center bg-checker relative group hover:border-[var(--color-cta)] transition-all">
-                    <input type="file" accept=".xlsx,.xls,.csv" class="absolute inset-0 opacity-0 cursor-pointer z-10"
-                        multiple @change="handleFile($event, 'target')" />
-                    <div class="text-center p-8 pointer-events-none group-hover:scale-105 transition-transform">
-                        <div
-                            class="w-14 h-14 bg-[var(--color-background)] rounded-xl flex items-center justify-center mb-3 mx-auto border border-[var(--color-border)] shadow-sm text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <path d="M8 13h2" />
-                                <path d="M8 17h2" />
-                                <path d="M14 13h2" />
-                                <path d="M14 17h2" />
-                            </svg>
-                        </div>
-                        <p class="text-sm font-bold">{{ t('excelTarget') }}</p>
-                        <p class="text-xs text-[var(--color-secondary)] mt-1 opacity-70">{{ targetWorkbook ? 'Ready' :
-                            t('uploadExcel') }}</p>
-                    </div>
-                </div>
+                <FileDropzone side="source" :title="t('excelSource')" :hint="t('uploadExcel')"
+                    :is-ready="!!sourceWorkbook" accept=".xlsx,.xls,.csv" @change="handleFile($event, 'source')">
+                    <template #icon>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <path d="M8 13h2" />
+                            <path d="M8 17h2" />
+                            <path d="M14 13h2" />
+                            <path d="M14 17h2" />
+                        </svg>
+                    </template>
+                </FileDropzone>
+                <FileDropzone side="target" :title="t('excelTarget')" :hint="t('uploadExcel')"
+                    :is-ready="!!targetWorkbook" accept=".xlsx,.xls,.csv" @change="handleFile($event, 'target')">
+                    <template #icon>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <path d="M8 13h2" />
+                            <path d="M8 17h2" />
+                            <path d="M14 13h2" />
+                            <path d="M14 17h2" />
+                        </svg>
+                    </template>
+                </FileDropzone>
             </div>
 
             <!-- NATIVE GRID VIEW -->
@@ -474,7 +456,8 @@ const getRowDiff = (row: number) => {
                 <div class="flex-1 flex overflow-hidden bg-[var(--color-background)]">
 
                     <!-- UNIFIED VIEW -->
-                    <div v-if="viewMode === 'unified'" ref="unifiedTableRef" class="flex-1 overflow-auto native-grid custom-scrollbar">
+                    <div v-if="viewMode === 'unified'" ref="unifiedTableRef"
+                        class="flex-1 overflow-auto native-grid custom-scrollbar">
                         <table class="excel-table">
                             <thead>
                                 <tr>
@@ -499,8 +482,8 @@ const getRowDiff = (row: number) => {
                                         {{ r }}
                                     </td>
                                     <td v-for="c in currentSheetDiff.colCount" :key="'c-' + r + '-' + c"
-                                        :id="`cell-unified-${r - 1}-${c - 1}`"
-                                        class="cell-wrapper" :class="getCellClass(r - 1, c - 1)">
+                                        :id="`cell-unified-${r - 1}-${c - 1}`" class="cell-wrapper"
+                                        :class="getCellClass(r - 1, c - 1)">
                                         <div class="cell-content">
                                             <template v-if="getCellClass(r - 1, c - 1).includes('cell-modified')">
                                                 <div class="val-old">{{ currentSheetDiff.sourceData[r - 1]?.[c - 1] }}
@@ -557,12 +540,11 @@ const getRowDiff = (row: number) => {
                                             {{ r }}
                                         </td>
                                         <td v-for="c in currentSheetDiff.colCount" :key="'sc-' + r + '-' + c"
-                                            :id="`cell-source-${r - 1}-${c - 1}`"
-                                            class="cell-wrapper"
+                                            :id="`cell-source-${r - 1}-${c - 1}`" class="cell-wrapper"
                                             :class="getCellClass(r - 1, c - 1, 'source')">
                                             <div class="cell-content">
                                                 <span class="val-plain">{{ currentSheetDiff.sourceData[r - 1]?.[c - 1]
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -579,12 +561,14 @@ const getRowDiff = (row: number) => {
                                 {{ t('diffResult') || 'Diff' }}
                             </div>
                             <div class="flex-1 py-1">
-                                <div v-for="r in currentSheetDiff.rowCount" :key="'db-' + r"
-                                    :id="`diff-row-${r - 1}`"
+                                <div v-for="r in currentSheetDiff.rowCount" :key="'db-' + r" :id="`diff-row-${r - 1}`"
                                     class="h-6 flex items-center justify-center relative">
-                                    
+
                                     <!-- Connection Lines (Optional styling purely for visual flow) -->
-                                    <div v-if="getRowDiff(r - 1)" class="absolute left-0 right-0 h-px bg-current opacity-10" :class="`text-${getRowDiff(r - 1)?.type === 'modified' ? 'yellow-500' : (getRowDiff(r - 1)?.type === 'added' ? 'emerald-500' : 'red-500')}`"></div>
+                                    <div v-if="getRowDiff(r - 1)"
+                                        class="absolute left-0 right-0 h-px bg-current opacity-10"
+                                        :class="`text-${getRowDiff(r - 1)?.type === 'modified' ? 'yellow-500' : (getRowDiff(r - 1)?.type === 'added' ? 'emerald-500' : 'red-500')}`">
+                                    </div>
 
                                     <ZTooltip v-if="getRowDiff(r - 1)" position="top">
                                         <div class="diff-icon-wrapper relative z-10" :class="[
@@ -637,7 +621,7 @@ const getRowDiff = (row: number) => {
                                                         }}</span>
                                                 </div>
                                                 <div class="mt-1 text-[10px] opacity-50">{{ getRowDiff(r - 1)?.address
-                                                }}
+                                                    }}
                                                 </div>
                                             </div>
                                         </template>
@@ -661,12 +645,11 @@ const getRowDiff = (row: number) => {
                                     <tr v-for="r in currentSheetDiff.rowCount" :key="'srr-' + r">
                                         <td class="row-header">{{ r }}</td>
                                         <td v-for="c in currentSheetDiff.colCount" :key="'tc-' + r + '-' + c"
-                                            :id="`cell-target-${r - 1}-${c - 1}`"
-                                            class="cell-wrapper"
+                                            :id="`cell-target-${r - 1}-${c - 1}`" class="cell-wrapper"
                                             :class="getCellClass(r - 1, c - 1, 'target')">
                                             <div class="cell-content">
                                                 <span class="val-plain">{{ currentSheetDiff.targetData[r - 1]?.[c - 1]
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -704,7 +687,9 @@ const getRowDiff = (row: number) => {
                                     <ZBadge
                                         :variant="getCellClass(diff.row, diff.col).includes('cell-added') ? 'success' : (getCellClass(diff.row, diff.col).includes('cell-removed') ? 'danger' : 'primary')"
                                         size="sm">
-                                        {{ getCellClass(diff.row, diff.col).replace('cell-', '').replace(' cell--active', '').toUpperCase() }}
+                                        {{ getCellClass(diff.row, diff.col).replace('cell-', '')
+                                            .replace('cell--active',
+                                                '').toUpperCase() }}
                                     </ZBadge>
                                 </div>
                                 <div class="grid grid-cols-[1fr,auto,1fr] items-center gap-2">
@@ -740,27 +725,11 @@ const getRowDiff = (row: number) => {
                 </div>
 
                 <!-- Footer Legend -->
-                <div
-                    class="h-6 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center px-4 gap-4 flex-shrink-0">
-                    <div class="flex items-center gap-1.5">
-                        <div
-                            class="w-2.5 h-2.5 bg-[#fff5f5] border border-[#ffc9c9] rounded-sm dark:bg-[#3b1d1d] dark:border-[#555]">
-                        </div>
-                        <span class="text-[10px] text-[var(--color-secondary)]">{{ t('cellOriginal') }}</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <div
-                            class="w-2.5 h-2.5 bg-[#ebfbee] border border-[#b2f2bb] rounded-sm dark:bg-[#1b3121] dark:border-[#555]">
-                        </div>
-                        <span class="text-[10px] text-[var(--color-secondary)]">{{ t('cellModified') }}</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <div
-                            class="w-2.5 h-2.5 bg-[#fff9db] border border-[#ffec99] rounded-sm dark:bg-[#3e3810] dark:border-[#555]">
-                        </div>
-                        <span class="text-[10px] text-[var(--color-secondary)]">Changed</span>
-                    </div>
-                </div>
+                <DiffLegend :items="[
+                    { label: t('cellOriginal'), swatchClass: 'bg-[#fff5f5] border border-[#ffc9c9] dark:bg-[#3b1d1d] dark:border-[#555]' },
+                    { label: t('cellModified'), swatchClass: 'bg-[#ebfbee] border border-[#b2f2bb] dark:bg-[#1b3121] dark:border-[#555]' },
+                    { label: 'Changed', swatchClass: 'bg-[#fff9db] border border-[#ffec99] dark:bg-[#3e3810] dark:border-[#555]' }
+                ]" />
             </div>
         </div>
     </div>
@@ -770,13 +739,6 @@ const getRowDiff = (row: number) => {
 .excel-root {
     background: var(--color-background);
     font-family: var(--font-family, Inter, system-ui, sans-serif);
-}
-
-.bg-checker {
-    background-color: var(--color-background);
-    background-image: radial-gradient(var(--color-border) 1px, transparent 1px);
-    background-size: 20px 20px;
-    opacity: 0.4;
 }
 
 /* ── ZTools Modern Grid ───────────────────────────── */
@@ -974,7 +936,7 @@ const getRowDiff = (row: number) => {
 
 .diff-icon--active {
     transform: scale(1.15);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .diff-icon--active.diff-icon--modified {

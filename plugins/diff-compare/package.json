@@ -8,8 +8,8 @@
     "build": "vue-tsc && vite build"
   },
   "dependencies": {
-    "@types/js-beautify": "^1.14.3",
     "js-beautify": "^1.15.4",
+    "mammoth": "^1.8.0",
     "pinia": "^3.0.4",
     "pixelmatch": "^7.1.0",
     "vue": "^3.5.13",
@@ -17,6 +17,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/js-beautify": "^1.14.3",
     "@types/pixelmatch": "^5.2.6",
     "@vitejs/plugin-vue": "^5.2.1",
     "@ztools-center/ztools-api-types": "^1.0.1",

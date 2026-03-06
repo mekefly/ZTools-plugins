@@ -4,6 +4,7 @@ import DiffWorkbench from '@/components/layout/DiffWorkbench.vue'
 import TextDiffView from '@/components/diff-views/TextDiffView.vue'
 import ImageDiffView from '@/components/diff-views/ImageDiffView.vue'
 import ExcelDiffView from '@/components/diff-views/ExcelDiffView.vue'
+import WordDiffView from '@/components/diff-views/WordDiffView.vue'
 
 onMounted(() => {
   if (window.ztools) {
@@ -28,6 +29,9 @@ onMounted(() => {
     </template>
     <template #excel>
       <ExcelDiffView />
+    </template>
+    <template #word>
+      <WordDiffView />
     </template>
   </DiffWorkbench>
 </template>
