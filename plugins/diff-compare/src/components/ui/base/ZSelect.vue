@@ -138,6 +138,26 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
         0 4px 6px -1px rgba(0, 0, 0, 0.15),
         0 10px 20px -2px rgba(0, 0, 0, 0.15);
     overflow: hidden;
+    overflow-y: auto;
+    max-height: 240px;
+
+    /* Scroller styling */
+    &::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: var(--color-border);
+        border-radius: 4px;
+
+        &:hover {
+            background: var(--color-secondary);
+        }
+    }
 
     /* Dark mode: stronger shadow so the panel lifts visually */
     :global(.dark) & {

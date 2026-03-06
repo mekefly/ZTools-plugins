@@ -7,7 +7,9 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
     const sourceLines = source === '' ? [] : source.split(/\r?\n/)
     const targetLines = target === '' ? [] : target.split(/\r?\n/)
 
-    const chunks = this.myersDiff(sourceLines, targetLines)
+    let chunks = this.myersDiff(sourceLines, targetLines)
+    chunks = this.processIntraLineDiff(chunks)
+
     return {
       type: 'text',
       chunks,
@@ -17,10 +19,55 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
   }
 
   /**
-   * Basic Myers shortest edit script (SES) algorithm
-   * O(ND) time and space
+   * Post-process chunks to find adjacent delete/insert pairs and compute intra-line diff
    */
-  private myersDiff(a: string[], b: string[]): DiffChunk[] {
+  private processIntraLineDiff(chunks: DiffChunk[]): DiffChunk[] {
+    const result: DiffChunk[] = []
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const current = chunks[i]
+      const next = chunks[i + 1]
+
+      if (current.type === 'delete' && next && next.type === 'insert') {
+        // Potential modified line pair
+        // For simplicity in this first pass, we only pair 1:1. 
+        // A more advanced version would handle N:M pairings.
+        const intraSource = current.value
+        const intraTarget = next.value
+
+        // Heuristic: if lines are somewhat similar, compute intra-line diff
+        const subChunks = this.computeIntraLine(intraSource, intraTarget)
+        
+        result.push({
+          type: 'modified',
+          value: intraSource, // Source side
+          value2: intraTarget, // Target side (newly added to type)
+          subChunks
+        })
+        
+        // Skip the 'insert' chunk as we merged it
+        i++
+      } else {
+        result.push(current)
+      }
+    }
+    return result
+  }
+
+  /**
+   * Compute character-level diff between two strings
+   */
+  private computeIntraLine(a: string, b: string): DiffChunk[] {
+    const charsA = [...a]
+    const charsB = [...b]
+    return this.myersDiff(charsA, charsB)
+  }
+
+  /**
+   * Basic Myers shortest edit script (SES) algorithm
+   * Works on any array type T
+   */
+  private myersDiff<T>(a: T[], b: T[]): DiffChunk[] {
     const n = a.length
     const m = b.length
     const max = n + m
@@ -29,7 +76,6 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
     const v: Record<number, number> = {}
     v[1] = 0
     
-    // Store history of V to backtrack the actual path
     const trace: Record<number, number>[] = []
 
     for (let d = 0; d <= max; d++) {
@@ -40,22 +86,18 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
         let x: number
         const down = (k === -d || (k !== d && v[k - 1] < v[k + 1]))
         if (down) {
-          // move down (insertion)
           x = v[k + 1]
         } else {
-          // move right (deletion)
           x = v[k - 1] + 1
         }
         let y = x - k
 
-        // Follow diagonals (equal elements)
         while (x < n && y < m && a[x] === b[y]) {
           x++
           y++
         }
         v[k] = x
 
-        // Reached the end?
         if (x >= n && y >= m) {
           return this.backtrack(trace, a, b)
         }
@@ -67,7 +109,7 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
   /**
    * Backtrack through the trace to build the sequence of edits
    */
-  private backtrack(trace: Record<number, number>[], a: string[], b: string[]): DiffChunk[] {
+  private backtrack<T>(trace: Record<number, number>[], a: T[], b: T[]): DiffChunk[] {
     const result: DiffChunk[] = []
     let x = a.length
     let y = b.length
@@ -86,28 +128,23 @@ export class TextDiffStrategy implements IDiffStrategy<string> {
       const prevX = v[prevK]
       const prevY = prevX - prevK
 
-      // While on a diagonal
       while (x > prevX && y > prevY) {
-        result.push({ type: 'equal', value: a[x - 1] })
+        result.push({ type: 'equal', value: String(a[x - 1]) })
         x--
         y--
       }
 
       if (d > 0) {
-        // Did we move vertically or horizontally?
         if (x === prevX) {
-          // Insertion
-          result.push({ type: 'insert', value: b[y - 1] })
+          result.push({ type: 'insert', value: String(b[y - 1]) })
           y--
         } else {
-          // Deletion
-          result.push({ type: 'delete', value: a[x - 1] })
+          result.push({ type: 'delete', value: String(a[x - 1]) })
           x--
         }
       }
     }
 
-    // Results are built backwards, so reverse them
     return result.reverse()
   }
 }

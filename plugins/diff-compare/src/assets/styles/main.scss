@@ -12,7 +12,9 @@
   --color-cta-dark: #4ADE80;
 
   --color-delete-bg-dark: rgba(248, 113, 113, 0.15);
+  --color-delete-bg-strong-dark: rgba(248, 113, 113, 0.4);
   --color-insert-bg-dark: rgba(74, 222, 128, 0.15);
+  --color-insert-bg-strong-dark: rgba(74, 222, 128, 0.4);
   --color-delete-text-dark: #FCA5A5;
   --color-insert-text-dark: #86EFAC;
 
@@ -25,7 +27,9 @@
   --color-cta-light: #059669;
 
   --color-delete-bg-light: rgba(239, 68, 68, 0.12);
+  --color-delete-bg-strong-light: rgba(239, 68, 68, 0.28);
   --color-insert-bg-light: rgba(16, 185, 129, 0.12);
+  --color-insert-bg-strong-light: rgba(16, 185, 129, 0.28);
   --color-delete-text-light: #991B1B;
   --color-insert-text-light: #065F46;
 }
@@ -40,7 +44,9 @@
   --color-cta: var(--color-cta-light);
 
   --color-delete-bg: var(--color-delete-bg-light);
+  --color-delete-bg-strong: var(--color-delete-bg-strong-light);
   --color-insert-bg: var(--color-insert-bg-light);
+  --color-insert-bg-strong: var(--color-insert-bg-strong-light);
   --color-delete-text: var(--color-delete-text-light);
   --color-insert-text: var(--color-insert-text-light);
 
@@ -61,7 +67,9 @@
   --color-cta: var(--color-cta-dark);
 
   --color-delete-bg: var(--color-delete-bg-dark);
+  --color-delete-bg-strong: var(--color-delete-bg-strong-dark);
   --color-insert-bg: var(--color-insert-bg-dark);
+  --color-insert-bg-strong: var(--color-insert-bg-strong-dark);
   --color-delete-text: var(--color-delete-text-dark);
   --color-insert-text: var(--color-insert-text-dark);
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Select from './Select.vue'
+import ZSelect from './base/ZSelect.vue'
 import { useSettingsStore } from '@/store/settings'
 import { storeToRefs } from 'pinia'
 
@@ -104,7 +104,7 @@ const formatOptions = computed(() => [
                         <p class="sp-section-label">
                             {{ locale === 'zh' ? '显示语言' : 'Display Language' }}
                         </p>
-                        <Select v-model="locale" :options="langOptions" />
+                        <ZSelect v-model="locale" :options="langOptions" />
                     </section>
 
                     <!-- Auto Format section -->
@@ -112,7 +112,7 @@ const formatOptions = computed(() => [
                         <p class="sp-section-label">
                             {{ t('autoFormat') }}
                         </p>
-                        <Select v-model="autoFormatValue" :options="formatOptions" />
+                        <ZSelect v-model="autoFormatValue" :options="formatOptions" />
                     </section>
 
                     <div class="sp-divider"></div>

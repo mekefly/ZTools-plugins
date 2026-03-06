@@ -1,9 +1,11 @@
 export type DiffType = 'text' | 'image' | 'word'
 
 export interface DiffChunk {
-  type: 'equal' | 'insert' | 'delete'
+  type: 'equal' | 'insert' | 'delete' | 'modified'
   value: string
-  // For UI rendering, we might need a unique ID or line number references.
+  value2?: string // For modified lines, stores the target value
+  // For modified lines, we may have sub-chunks (character-level diff)
+  subChunks?: DiffChunk[]
 }
 
 export interface DiffResult {
