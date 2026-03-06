@@ -20,7 +20,6 @@ function getAllBuiltinToolNames() {
         }
     }
     // 过滤掉 'sub_agent' 自身，防止子智能体无限递归调用子智能体（除非显式指定）
-    // 当然，如果你希望允许嵌套，可以去掉这个过滤
     return allToolNames.filter(name => name !== 'sub_agent');
 }
 
@@ -133,7 +132,7 @@ function listSkills(skillRootPath) {
                             name: metadata.name || item.name,
                             description: metadata.description || 'No description provided.',
                             userInvocable: metadata['user-invocable'] !== false,
-                            disabled: metadata['disable-model-invocation'] === false, // 注意 yaml解析后是 boolean
+                            disabled: metadata['disable-model-invocation'] === true,
                             context: metadata.context || 'normal', // normal | fork
                             allowedTools: metadata['allowed-tools'],
                             path: skillDir

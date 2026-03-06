@@ -19,6 +19,7 @@ const {
     getMcpToolCache,
     getCachedBackgroundImage,
     cacheBackgroundImage,
+    broadcastEvent,
 } = require('./data.js');
 
 const {
@@ -39,6 +40,7 @@ const {
   initializeMcpClient, 
   invokeMcpTool,
   closeMcpClient,
+  connectAndFetchTools,
 } = require('./mcp.js');
 
 const {
@@ -161,6 +163,45 @@ window.api = {
             return await initializeMcpClient(activeServerConfigs, {}, saveMcpToolCache);
         }
     },
+    testMcpConnection: async (serverConfig) => {
+        try {
+            // 连接并获取最新工具
+            const rawTools = await connectAndFetchTools(serverConfig.id, {
+                transport: serverConfig.type,
+                command: serverConfig.command,
+                args: serverConfig.args,
+                url: serverConfig.baseUrl,
+                env: serverConfig.env,
+                headers: serverConfig.headers,
+            });
+
+            const sanitizedTools = rawTools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema || tool.schema || {}
+            }));
+
+            // 读取旧缓存以继承启用/禁用状态
+            const oldCacheMap = await getMcpToolCache();
+            const oldTools = oldCacheMap ? (oldCacheMap[serverConfig.id] || []) : [];
+
+            const mergedTools = sanitizedTools.map(newTool => {
+                const oldTool = oldTools.find(t => t.name === newTool.name);
+                return {
+                    ...newTool,
+                    enabled: oldTool ? (oldTool.enabled ?? true) : true
+                };
+            });
+
+            const cleanTools = JSON.parse(JSON.stringify(mergedTools));
+            // 覆盖保存最新缓存
+            await saveMcpToolCache(serverConfig.id, cleanTools);
+            return { success: true, tools: cleanTools };
+        } catch (error) {
+            console.error("[WindowPreload] MCP Refresh Error:", error);
+            return { success: false, error: String(error.message || error) };
+        }
+    },
     invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
         return await invokeMcpTool(toolName, toolArgs, signal, context);
     },
@@ -216,25 +257,27 @@ window.api = {
         return getSkillDetails(rootPath, id);
     },
     saveSkill: async (rootPath, id, content) => {
-        return saveSkill(rootPath, id, content);
+        const res = await saveSkill(rootPath, id, content);
+        broadcastEvent('skills-updated');
+        return res;
     },
     deleteSkill: async (rootPath, id) => {
-        return deleteSkill(rootPath, id);
+        const res = await deleteSkill(rootPath, id);
+        broadcastEvent('skills-updated');
+        return res;
     },
     toggleSkillForkMode: async (rootPath, skillId, enableFork) => {
         try {
-            const details = getSkillDetails(rootPath, skillId);
+            const details = await getSkillDetails(rootPath, skillId);
             const meta = details.metadata;
             const body = details.content;
 
-            // 更新元数据
             if (enableFork) {
                 meta['context'] = 'fork';
             } else {
                 delete meta['context'];
             }
 
-            // 重建文件内容 (简易 YAML 构建，保持与 Skills.vue 逻辑一致)
             const lines = ['---'];
             if (meta.name) lines.push(`name: ${meta.name}`);
             if (meta.description) lines.push(`description: ${meta.description}`);
@@ -252,11 +295,23 @@ window.api = {
             lines.push(body || '');
 
             const content = lines.join('\n');
-            return saveSkill(rootPath, skillId, content);
+            const res = await saveSkill(rootPath, skillId, content);
+            broadcastEvent('skills-updated');
+            return res;
         } catch (e) {
             console.error("Toggle Fork Mode Error:", e);
             throw e;
         }
+    },
+    onMcpCacheUpdated: (callback) => {
+        ipcRenderer.on('mcp-cache-updated', (event, serverId) => {
+            callback(serverId);
+        });
+    },
+    onSkillsUpdated: (callback) => {
+        ipcRenderer.on('skills-updated', (event) => {
+            callback();
+        });
     },
     // 生成 Skill Tool 定义
     getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
@@ -303,4 +358,8 @@ window.api = {
     },
     // 暴露 path.join 
     pathJoin: (...args) => require('path').join(...args),
+    addTaskHistory: async (taskId, logEntry) => {
+        const { addTaskHistory } = require('./data.js');
+        return await addTaskHistory(taskId, logEntry);
+    },
 };

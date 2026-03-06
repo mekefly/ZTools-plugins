@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
 import { createClient } from "webdav/web";
-import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown } from '@element-plus/icons-vue';
+import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown, Refresh } from '@element-plus/icons-vue';
 
 import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -101,6 +101,7 @@ const modelMap = ref({});
 const model = ref("");
 const isAlwaysOnTop = ref(true);
 const currentOS = ref('win');
+const currentTaskConfig = ref(null);
 
 const currentProviderID = ref(defaultConfig.config.providerOrder[0]);
 const base_url = ref("");
@@ -228,6 +229,7 @@ const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
 const isMcpLoading = ref(false);
 const mcpFilter = ref('all');
+const isRefreshingMcp = ref(false);
 const mcpToolCache = ref({});
 const expandedMcpServers = ref(new Set());
 
@@ -236,6 +238,50 @@ const toggleMcpServerExpansion = (serverId) => {
     expandedMcpServers.value.delete(serverId);
   } else {
     expandedMcpServers.value.add(serverId);
+  }
+};
+
+const refreshSelectedMcpServers = async () => {
+  if (tempSessionMcpServerIds.value.length === 0) {
+    showDismissibleMessage.warning('请先勾选需要刷新的 MCP 服务');
+    return;
+  }
+  isRefreshingMcp.value = true;
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const id of tempSessionMcpServerIds.value) {
+    const serverConf = currentConfig.value.mcpServers[id];
+    if (!serverConf || serverConf.type === 'builtin') continue; 
+
+    const configToTest = {
+      id: id,
+      type: serverConf.type,
+      command: serverConf.command,
+      baseUrl: serverConf.baseUrl,
+      env: serverConf.env,
+      headers: serverConf.headers,
+      args: serverConf.args
+    };
+
+    const res = await window.api.testMcpConnection(configToTest);
+    if (res.success) {
+      successCount++;
+    } else {
+      failCount++;
+    }
+  }
+
+  // 刷新完毕后，重新拉取最新的缓存以渲染 UI
+  mcpToolCache.value = await window.api.getMcpToolCache() || {};
+  isRefreshingMcp.value = false;
+
+  if (failCount === 0 && successCount > 0) {
+    showDismissibleMessage.success(`成功刷新 ${successCount} 个服务的工具缓存`);
+  } else if (failCount > 0) {
+    showDismissibleMessage.warning(`刷新完成: ${successCount} 成功, ${failCount} 失败`);
+  } else {
+    showDismissibleMessage.info(`选中的皆为内置服务，无需手动刷新`);
   }
 };
 
@@ -391,6 +437,18 @@ const fetchSkillsList = async () => {
     try {
       const skills = await window.api.listSkills(path);
       allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
+
+      const validSkillNames = allSkillsList.value.map(s => s.name);
+
+      const validSessionSkills = sessionSkillIds.value.filter(name => validSkillNames.includes(name));
+      if (validSessionSkills.length !== sessionSkillIds.value.length) {
+        sessionSkillIds.value = validSessionSkills;
+      }
+
+      const validTempSkills = tempSessionSkillIds.value.filter(name => validSkillNames.includes(name));
+      if (validTempSkills.length !== tempSessionSkillIds.value.length) {
+        tempSessionSkillIds.value = validTempSkills;
+      }
     } catch (e) {
       console.error("Fetch skills failed:", e);
     }
@@ -405,37 +463,37 @@ const handleQuickSkillToggle = async (skillName) => {
     if (!tempSessionSkillIds.value.includes(skillName)) {
       tempSessionSkillIds.value.push(skillName);
     }
-    
+
     // 检查是否需要自动启用内置 MCP
     if (currentConfig.value.mcpServers) {
-        const builtinIds = Object.entries(currentConfig.value.mcpServers)
-          .filter(([, server]) => server.type === 'builtin')
-          .map(([id]) => id);
-        
-        let changed = false;
-        builtinIds.forEach(id => {
-            if (!sessionMcpServerIds.value.includes(id)) {
-                sessionMcpServerIds.value.push(id);
-                changed = true;
-            }
-            // 同步 temp 列表
-            if (!tempSessionMcpServerIds.value.includes(id)) {
-                tempSessionMcpServerIds.value.push(id);
-            }
-        });
-        
-        if (changed) {
-            showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
-            await applyMcpTools(false); // 重新加载 MCP
-            return; 
+      const builtinIds = Object.entries(currentConfig.value.mcpServers)
+        .filter(([, server]) => server.type === 'builtin')
+        .map(([id]) => id);
+
+      let changed = false;
+      builtinIds.forEach(id => {
+        if (!sessionMcpServerIds.value.includes(id)) {
+          sessionMcpServerIds.value.push(id);
+          changed = true;
         }
+        // 同步 temp 列表
+        if (!tempSessionMcpServerIds.value.includes(id)) {
+          tempSessionMcpServerIds.value.push(id);
+        }
+      });
+
+      if (changed) {
+        showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
+        await applyMcpTools(false); // 重新加载 MCP
+        return;
+      }
     }
     showDismissibleMessage.success(`已启用 Skill "${skillName}"`);
   } else {
     sessionSkillIds.value.splice(index, 1);
     // 同步删除 temp
     const tempIndex = tempSessionSkillIds.value.indexOf(skillName);
-    if(tempIndex !== -1) tempSessionSkillIds.value.splice(tempIndex, 1);
+    if (tempIndex !== -1) tempSessionSkillIds.value.splice(tempIndex, 1);
     showDismissibleMessage.info(`已禁用 Skill "${skillName}"`);
   }
 };
@@ -654,13 +712,13 @@ const handleMainClick = async (event) => {
       // 收集当前所有渲染成功的图片
       const allImages = Array.from(document.querySelectorAll('.markdown-wrapper img'));
       const validSrcList = allImages.map(imgEl => imgEl.src).filter(Boolean);
-      
+
       let initialIndex = validSrcList.indexOf(img.src);
       if (initialIndex === -1) {
-          initialIndex = 0;
-          validSrcList.unshift(img.src);
+        initialIndex = 0;
+        validSrcList.unshift(img.src);
       }
-      
+
       imageViewerSrcList.value = validSrcList;
       imageViewerInitialIndex.value = initialIndex;
       currentImageViewerIndex.value = initialIndex;
@@ -671,7 +729,7 @@ const handleMainClick = async (event) => {
 
   // 2. 处理内联代码块点击
   const codeEl = target.closest('code') || target.closest('.inline-code-tag');
-  
+
   if (codeEl) {
     const inMarkdown = codeEl.closest('.markdown-wrapper');
     const inPre = codeEl.closest('pre');
@@ -679,13 +737,13 @@ const handleMainClick = async (event) => {
     if (inMarkdown && !inPre) {
       event.preventDefault();
       event.stopPropagation();
-      
+
       const codeContent = (codeEl.textContent || '').trim();
 
       if (codeContent) {
         try {
           const result = await window.api.handleCodeClick(codeContent);
-          
+
           if (result === 'opened-url') {
             showDismissibleMessage.success('已在浏览器中打开链接');
           } else if (result === 'opened-path') {
@@ -1036,6 +1094,7 @@ const saveSystemPrompt = async () => {
         ifTextNecessary: false,
         isDirectSend_file: true,
         isDirectSend_normal: true,
+        isDirectSend_image: true,
         voice: "",
         isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
         autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
@@ -1140,6 +1199,11 @@ onMounted(async () => {
     try {
       const configData = await window.api.getConfig();
       currentConfig.value = configData.config;
+
+      if (data?.tempPromptConfig && data?.code) {
+        if (!currentConfig.value.prompts) currentConfig.value.prompts = {};
+        currentConfig.value.prompts[data.code] = data.tempPromptConfig;
+      }
     } catch (err) {
       currentConfig.value = defaultConfig.config;
       showDismissibleMessage.error('加载用户配置失败，使用默认配置。');
@@ -1234,16 +1298,43 @@ onMounted(async () => {
     if (data) {
       basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+      if (data.type === "task") {
+        currentTaskConfig.value = data.taskConfig;
 
+        // 覆盖 MCP 与 Skill 配置
+        if (data.taskConfig.extraMcp) {
+          sessionMcpServerIds.value = [...data.taskConfig.extraMcp];
+          tempSessionMcpServerIds.value = [...data.taskConfig.extraMcp];
+        }
+        if (data.taskConfig.extraSkills) {
+          sessionSkillIds.value = [...data.taskConfig.extraSkills];
+          tempSessionSkillIds.value = [...data.taskConfig.extraSkills];
+        }
+
+        // 将任务内容直接作为用户的输入，压入历史记录，而不是放到输入框
+        const system_time = new Date().toLocaleString('sv-SE');
+        const pre_prompt = `## Scheduled Task\n\n**system_time**:${system_time}\n\n`;
+        const suffix_prompt = "\n\nScheduled task triggered! This is a task that you need to execute autonomously without human intervention. Please execute immediately and provide correct feedback.";
+        history.value.push({ role: "user", content: pre_prompt+data.payload+suffix_prompt });
+        chat_show.value.push({
+          id: messageIdCounter.value++,
+          role: "user",
+          content: [{ type: "text", text: pre_prompt+data.payload+suffix_prompt }],
+          timestamp: new Date().toLocaleString('sv-SE')
+        });
+
+        // 标记需要直接发送
+        shouldDirectSend = true;
+      }
       if (data.type === "over" && data.payload) {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(data.payload);
-          if (old_session && old_session.anywhere_history === true) { 
-            sessionLoaded = true; 
+          if (old_session && old_session.anywhere_history === true) {
+            sessionLoaded = true;
             isSessionRestored = true; // 标记会话已恢复
-            await loadSession(old_session); 
-            autoCloseOnBlur.value = false; 
+            await loadSession(old_session);
+            autoCloseOnBlur.value = false;
           }
         } catch (error) { }
         if (!sessionLoaded) {
@@ -1257,7 +1348,7 @@ onMounted(async () => {
           }
         }
       } else if (data.type === "img" && data.payload) {
-        if (currentPromptConfig.isDirectSend_normal) {
+        if (currentPromptConfig.isDirectSend_image ?? true) {
           history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
           shouldDirectSend = true;
@@ -1269,8 +1360,8 @@ onMounted(async () => {
           let sessionLoaded = false;
           if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(data.payload[0].path);
-            if (fileObject) { 
-              sessionLoaded = await checkAndLoadSessionFromFile(fileObject); 
+            if (fileObject) {
+              sessionLoaded = await checkAndLoadSessionFromFile(fileObject);
               if (sessionLoaded) isSessionRestored = true; // 标记会话已恢复
             }
           }
@@ -1291,26 +1382,26 @@ onMounted(async () => {
 
     if (!isSessionRestored) {
       const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
-      let mcpServersToLoad = [...defaultMcpServers];
 
-      // 如果存在 Skill，强制合并内置 MCP 服务
+      let mcpServersToLoad = [...new Set([...defaultMcpServers, ...sessionMcpServerIds.value])];
+
       if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
         const builtinIds = Object.entries(currentConfig.value.mcpServers)
           .filter(([, server]) => server.type === 'builtin')
           .map(([id]) => id);
-        // 去重合并
         mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
       }
 
       if (mcpServersToLoad.length > 0) {
-        // 过滤出有效的 ID
         const validIds = mcpServersToLoad.filter(id =>
           currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
         );
 
-        sessionMcpServerIds.value = [...validIds];
-        tempSessionMcpServerIds.value = [...validIds];
-        await applyMcpTools(false);
+        if (validIds.length > 0) {
+          sessionMcpServerIds.value = [...validIds];
+          tempSessionMcpServerIds.value = [...validIds];
+          await applyMcpTools(false);
+        }
       }
     }
 
@@ -1352,7 +1443,70 @@ onMounted(async () => {
         if (newConfig.zoom !== undefined) {
           zoomLevel.value = newConfig.zoom;
         }
+
+        // 1. 配置更新后同步重构服务商和模型列表
+        const newModelList = [];
+        const newModelMap = {};
+        newConfig.providerOrder.forEach(id => {
+          const provider = newConfig.providers[id];
+          if (provider?.enable) {
+            provider.modelList.forEach(m => {
+              const key = `${id}|${m}`;
+              newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
+              newModelMap[key] = `${provider.name}|${m}`;
+            });
+          }
+        });
+        modelList.value = newModelList;
+        modelMap.value = newModelMap;
+
+        // 2. 校验并清理已删除或被禁用的 MCP 服务
+        if (newConfig.mcpServers) {
+          let mcpChanged = false;
+          // 筛选当前真正有效的选中 ID
+          const validMcpIds = sessionMcpServerIds.value.filter(id => {
+            const server = newConfig.mcpServers[id];
+            return server && server.isActive; // 必须存在且启用
+          });
+
+          if (validMcpIds.length !== sessionMcpServerIds.value.length) {
+            sessionMcpServerIds.value = validMcpIds;
+            tempSessionMcpServerIds.value = tempSessionMcpServerIds.value.filter(id => {
+              const server = newConfig.mcpServers[id];
+              return server && server.isActive;
+            });
+            mcpChanged = true;
+          }
+
+          // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
+          if (mcpChanged && !loading.value) {
+            applyMcpTools(false);
+          }
+        }
       }
+    });
+  }
+
+  if (window.api && window.api.onMcpCacheUpdated) {
+    window.api.onMcpCacheUpdated(async (serverId) => {
+      try {
+        const cache = await window.api.getMcpToolCache() || {};
+        mcpToolCache.value = cache;
+
+        // 如果被修改具体工具启停的 MCP 正在被当前对话使用，并且没有在生成消息，重载工具
+        if (sessionMcpServerIds.value.includes(serverId) && !loading.value) {
+          applyMcpTools(false);
+        }
+      } catch (error) {
+        console.error("Auto refresh MCP cache failed:", error);
+      }
+    });
+  }
+
+  if (window.api && window.api.onSkillsUpdated) {
+    window.api.onSkillsUpdated(async () => {
+      // 内部已经集成了无效选中清理逻辑
+      await fetchSkillsList();
     });
   }
 });
@@ -2093,7 +2247,7 @@ const saveSessionAsJson = async () => {
           instance.confirmButtonLoading = true;
           try {
             const localChatPath = currentConfig.value.webdav?.localChatPath;
-            
+
             // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
               const separator = currentOS.value === 'win' ? '\\' : '/';
@@ -2251,103 +2405,166 @@ const saveSessionAsImage = async () => {
           if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
           const finalFilename = finalBasename + '.png';
           instance.confirmButtonLoading = true;
-          
+
+          // 还原最开始的消息提示，不作更改
           const loadingMsg = ElMessage.info({ message: '正在生成长图，请稍候...', duration: 0 });
 
           try {
-            const element = chatContainerRef.value.$el;
-            
-            // 获取背景色
+            const chatMain = chatContainerRef.value.$el;
+            const messageNodes = Array.from(chatMain.querySelectorAll('.chat-message'));
+
             const computedStyle = getComputedStyle(document.documentElement);
             let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
             if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
-                const isDark = document.documentElement.classList.contains('dark');
-                themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+              const isDark = document.documentElement.classList.contains('dark');
+              themeBgColor = isDark ? '#212121' : '#FFFFFD';
             }
 
-            const clone = element.cloneNode(true);
-            
-            // 设置最小宽度
-            const MIN_IMAGE_WIDTH = 800;
-            const targetWidth = Math.max(element.clientWidth, MIN_IMAGE_WIDTH);
+            const targetWidth = Math.max(chatMain.clientWidth, 800);
 
-            clone.style.width = `${targetWidth}px`;
-            clone.style.height = 'auto';
-            clone.style.maxHeight = 'none';
-            clone.style.overflow = 'visible';
-            clone.style.position = 'absolute'; 
-            clone.style.top = '0';
-            clone.style.left = '0';
-            clone.style.zIndex = '-9999';
-            
-            // 背景处理
+            // 1. 创建离线渲染容器
+            const renderWrapper = document.createElement('div');
+            renderWrapper.style.cssText = `
+              position: absolute; top: -10000px; left: 0;
+              width: ${targetWidth}px;
+              padding: 0 10px; /* 模拟原容器边距 */
+              box-sizing: border-box;
+              background: transparent;
+              z-index: -9999;
+            `;
+            chatMain.appendChild(renderWrapper);
+
+            // ================== 分组分块渲染 ==================
+            const chunkDataUrls = [];
+            const CHUNK_SIZE = 8;
+
+            for (let i = 0; i < messageNodes.length; i += CHUNK_SIZE) {
+              const chunkNodes = messageNodes.slice(i, i + CHUNK_SIZE);
+              const chunkContainer = document.createElement('div');
+              chunkContainer.style.display = 'flex';
+              chunkContainer.style.flexDirection = 'column';
+
+              const chunkImages = [];
+
+              for (const node of chunkNodes) {
+                const clone = node.cloneNode(true);
+                const footer = clone.querySelector('.message-footer');
+                if (footer) footer.remove();
+
+                // 解除 Markdown 容器高度限制，防止排版截断
+                const restrictSelectors = ['.markdown-wrapper', '.elx-xmarkdown-container', 'pre', '.table-scroll-wrapper'];
+                restrictSelectors.forEach(sel => {
+                  clone.querySelectorAll(sel).forEach(el => {
+                    el.style.display = 'block';
+                    el.style.height = 'auto';
+                    el.style.maxHeight = 'none';
+                    el.style.overflow = 'visible';
+                  });
+                });
+
+                // 强制关闭图片的懒加载机制，解决底部图片发白的问题
+                const images = Array.from(clone.querySelectorAll('img'));
+                images.forEach(img => {
+                  img.removeAttribute('loading');
+                  img.setAttribute('loading', 'eager');
+                  img.decoding = 'sync';
+                  const currentSrc = img.src;
+                  img.src = '';
+                  img.src = currentSrc;
+                  chunkImages.push(img);
+                });
+
+                chunkContainer.appendChild(clone);
+              }
+
+              renderWrapper.innerHTML = '';
+              renderWrapper.appendChild(chunkContainer);
+
+              // 严格等待本组图片加载完毕
+              await Promise.all(chunkImages.map(img => {
+                if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
+                return new Promise(resolve => {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                });
+              }));
+
+              await new Promise(r => setTimeout(r, 100)); // 让浏览器消化重绘队列
+
+              // 生成透明底的局部碎片
+              const msgCanvas = await html2canvas(renderWrapper, {
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: null,
+                scale: 2,
+                logging: false
+              });
+
+              chunkDataUrls.push(msgCanvas.toDataURL('image/png'));
+            }
+
+            // ================== 上下拼接与背景合成 ==================
+            renderWrapper.innerHTML = '';
+            renderWrapper.style.padding = '0'; // 消除内边距避免组装缝隙
+
+            const finalContainer = document.createElement('div');
+            finalContainer.style.width = '100%';
+            finalContainer.style.display = 'flex';
+            finalContainer.style.flexDirection = 'column';
+
+            // 完全还原最开始的背景渲染方案
             if (windowBackgroundImage.value) {
-                clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
-                clone.style.backgroundSize = 'cover';
-                clone.style.backgroundPosition = 'center';
-                clone.style.backgroundRepeat = 'no-repeat';
-                clone.style.backgroundColor = themeBgColor; 
+              finalContainer.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
+              finalContainer.style.backgroundSize = 'cover';
+              finalContainer.style.backgroundPosition = 'center';
+              finalContainer.style.backgroundRepeat = 'no-repeat';
+              finalContainer.style.backgroundColor = themeBgColor;
             } else {
-                clone.style.background = themeBgColor;
-            }
-            
-            // 强制展开代码块
-            const preElements = clone.querySelectorAll('pre');
-            preElements.forEach(pre => {
-                pre.style.whiteSpace = 'pre-wrap';
-                pre.style.overflow = 'visible';
-                pre.style.height = 'auto';
-                pre.style.maxHeight = 'none';
-            });
-
-            const mdWrappers = clone.querySelectorAll('.markdown-wrapper');
-            mdWrappers.forEach(wrapper => {
-                wrapper.style.height = 'auto';
-                wrapper.style.overflow = 'visible';
-            });
-
-            if (element.parentNode) {
-                element.parentNode.appendChild(clone);
-            } else {
-                document.body.appendChild(clone);
+              finalContainer.style.background = themeBgColor;
             }
 
-            await new Promise(r => setTimeout(r, 500));
+            // 将刚才分批截好的块无缝贴入大容器中
+            for (const dataUrl of chunkDataUrls) {
+              const img = document.createElement('img');
+              img.src = dataUrl;
+              img.style.width = '100%';
+              img.style.height = 'auto';
+              img.style.display = 'block';
+              finalContainer.appendChild(img);
+            }
 
-            const canvas = await html2canvas(clone, {
+            renderWrapper.appendChild(finalContainer);
+
+            await new Promise(r => setTimeout(r, 200));
+
+            // 进行极速合影 (因为此时 DOM 里只有几张 <img> 和 背景，没有任何复杂样式树，耗时约等于0)
+            const finalCanvas = await html2canvas(finalContainer, {
               useCORS: true,
               allowTaint: true,
-              backgroundColor: null, 
-              scale: 2, 
-              logging: false,
-              height: clone.scrollHeight,
-              windowHeight: clone.scrollHeight,
-              x: 0, 
-              y: 0, 
-              ignoreElements: (el) => false
+              backgroundColor: themeBgColor,
+              scale: 2,
+              logging: false
             });
 
-            if (clone.parentNode) {
-                clone.parentNode.removeChild(clone);
-            }
+            chatMain.removeChild(renderWrapper);
 
-            const dataUrl = canvas.toDataURL('image/png');
-
-            const byteString = atob(dataUrl.split(',')[1]);
+            // 导出与保存
+            const finalDataUrl = finalCanvas.toDataURL('image/png');
+            const byteString = atob(finalDataUrl.split(',')[1]);
             const ab = new ArrayBuffer(byteString.length);
             const ia = new Uint8Array(ab);
             for (let i = 0; i < byteString.length; i++) {
               ia[i] = byteString.charCodeAt(i);
             }
 
-            await window.api.saveFile({ 
-                title: '保存为图片', 
-                defaultPath: finalFilename, 
-                buttonLabel: '保存', 
-                filters: [{ name: 'PNG 图片', extensions: ['png'] }], 
-                fileContent: ia 
+            await window.api.saveFile({
+              title: '保存为图片',
+              defaultPath: finalFilename,
+              buttonLabel: '保存',
+              filters: [{ name: 'PNG 图片', extensions: ['png'] }],
+              fileContent: ia
             });
-            
+
             defaultConversationName.value = finalBasename;
             loadingMsg.close();
             showDismissibleMessage.success('会话已成功保存为长图！');
@@ -2358,6 +2575,9 @@ const saveSessionAsImage = async () => {
               console.error('保存图片失败:', error);
               showDismissibleMessage.error(`保存失败: ${error.message}`);
             }
+            // 出错时清理残留节点
+            const orphans = document.querySelectorAll('div[style*="z-index: -9999"]');
+            orphans.forEach(el => el.remove());
             done();
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
@@ -2490,7 +2710,7 @@ const loadSession = async (jsonData) => {
       sessionSkillIds.value = [];
       tempSessionSkillIds.value = [];
     }
-    
+
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
@@ -2999,129 +3219,129 @@ const askAI = async (forceSend = false) => {
 
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
-        let aggregatedMedia = []; 
-        let aggregatedToolCalls = []; 
+        let aggregatedMedia = [];
+        let aggregatedToolCalls = [];
         let aggregatedExtraContent = null;
         let lastUpdateTime = Date.now();
 
         const responsesItemIdToIndexMap = new Map();
 
         for await (const part of stream) {
+          // console.log(part);
           if (apiType === 'responses') {
-              if (part.type === 'response.output_text.delta') {
-                  aggregatedContent += part.delta;
-                  if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
-                    chat_show.value[currentAssistantChatShowIndex].status = 'end';
-                  }
-              } 
-              else if (part.type === 'response.reasoning_summary_text.delta') {
-                  aggregatedReasoningContent += part.delta;
-                  if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
-                    chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-                  }
-                  if (Date.now() - lastUpdateTime > 100) {
-                    chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                    lastUpdateTime = Date.now();
-                  }
+            if (part.type === 'response.output_text.delta') {
+              aggregatedContent += part.delta;
+              if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'end';
               }
-              else if (part.type === 'response.output_item.added') {
-                  if (part.item && part.item.type === 'function_call') {
-                      const index = aggregatedToolCalls.length;
-                      aggregatedToolCalls.push({
-                          id: part.item.call_id || part.item.id,
-                          type: "function",
-                          function: { name: part.item.name || "", arguments: "" }
-                      });
-                      responsesItemIdToIndexMap.set(part.item.id, index);
-                  }
+            }
+            else if (part.type === 'response.reasoning_summary_text.delta') {
+              aggregatedReasoningContent += part.delta;
+              if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
               }
-              else if (part.type === 'response.function_call_arguments.delta') {
-                  const index = responsesItemIdToIndexMap.get(part.item_id);
-                  if (index !== undefined && aggregatedToolCalls[index]) {
-                      aggregatedToolCalls[index].function.arguments += (part.delta || "");
-                  }
+              if (Date.now() - lastUpdateTime > 100) {
+                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                lastUpdateTime = Date.now();
               }
-          } 
+            }
+            else if (part.type === 'response.output_item.added') {
+              if (part.item && part.item.type === 'function_call') {
+                const index = aggregatedToolCalls.length;
+                aggregatedToolCalls.push({
+                  id: part.item.call_id || part.item.id,
+                  type: "function",
+                  function: { name: part.item.name || "", arguments: "" }
+                });
+                responsesItemIdToIndexMap.set(part.item.id, index);
+              }
+            }
+            else if (part.type === 'response.function_call_arguments.delta') {
+              const index = responsesItemIdToIndexMap.get(part.item_id);
+              if (index !== undefined && aggregatedToolCalls[index]) {
+                aggregatedToolCalls[index].function.arguments += (part.delta || "");
+              }
+            }
+          }
           else {
-              // Chat Completions 流式
-              const delta = part.choices?.[0]?.delta;
-              if (!delta) continue;
+            // Chat Completions 流式
+            const delta = part.choices?.[0]?.delta;
+            if (!delta) continue;
+            if (delta.extra_content) {
+              aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+            }
+            if (delta.thought_signature) {
+              aggregatedExtraContent = aggregatedExtraContent || {};
+              aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+              aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+            }
 
-              if (delta.extra_content) {
-                aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+            if (delta.reasoning_content || delta.reasoning) {
+              aggregatedReasoningContent += delta.reasoning_content || delta.reasoning;
+              if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
               }
-              if (delta.thought_signature) {
-                aggregatedExtraContent = aggregatedExtraContent || {};
-                aggregatedExtraContent.google = aggregatedExtraContent.google || {};
-                aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+              if (Date.now() - lastUpdateTime > 100) {
+                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                lastUpdateTime = Date.now();
               }
+            }
 
-              if (delta.reasoning_content) {
-                aggregatedReasoningContent += delta.reasoning_content;
-                if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
-                  chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-                }
-                if (Date.now() - lastUpdateTime > 100) {
-                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                  lastUpdateTime = Date.now();
-                }
-              }
-              
-              if (delta.content) {
-                if (typeof delta.content === 'string') {
-                  aggregatedContent += delta.content;
-                } else if (Array.isArray(delta.content)) {
-                  delta.content.forEach(item => {
-                    if (item.type === 'text') {
-                      aggregatedContent += (item.text || '');
-                    } else if (item.type === 'image_url') {
-                      aggregatedMedia.push(item);
-                    }
-                  });
-                }
-                if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
-                  chat_show.value[currentAssistantChatShowIndex].status = 'end';
-                }
-              }
-
-              if (delta.tool_calls) {
-                for (const toolCallChunk of delta.tool_calls) {
-                  const index = toolCallChunk.index ?? aggregatedToolCalls.length;
-                  if (!aggregatedToolCalls[index]) {
-                    aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+            if (delta.content) {
+              if (typeof delta.content === 'string') {
+                aggregatedContent += delta.content;
+              } else if (Array.isArray(delta.content)) {
+                delta.content.forEach(item => {
+                  if (item.type === 'text') {
+                    aggregatedContent += (item.text || '');
+                  } else if (item.type === 'image_url') {
+                    aggregatedMedia.push(item);
                   }
-                  const currentTool = aggregatedToolCalls[index];
-                  if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
-                  if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
-                  if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
-                  if (toolCallChunk.extra_content) {
-                    currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
-                  }
+                });
+              }
+              if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'end';
+              }
+            }
+
+            if (delta.tool_calls) {
+              for (const toolCallChunk of delta.tool_calls) {
+                const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+                if (!aggregatedToolCalls[index]) {
+                  aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+                }
+                const currentTool = aggregatedToolCalls[index];
+                if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+                if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+                if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+                if (toolCallChunk.extra_content) {
+                  currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
                 }
               }
+            }
           }
 
           if (Date.now() - lastUpdateTime > 100) {
-              const currentDisplayContent = [];
-              if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
-              if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
-              
-              chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
-              
-              if (aggregatedReasoningContent) {
-                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              }
-              lastUpdateTime = Date.now();
+            const currentDisplayContent = [];
+            if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
+            if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
+
+            chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
+
+            if (aggregatedReasoningContent) {
+              chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+            }
+            lastUpdateTime = Date.now();
           }
         }
 
         let finalContentForHistory = null;
         if (aggregatedMedia.length > 0) {
-            finalContentForHistory = [];
-            if (aggregatedContent) finalContentForHistory.push({ type: 'text', text: aggregatedContent });
-            finalContentForHistory.push(...aggregatedMedia);
+          finalContentForHistory = [];
+          if (aggregatedContent) finalContentForHistory.push({ type: 'text', text: aggregatedContent });
+          finalContentForHistory.push(...aggregatedMedia);
         } else {
-            finalContentForHistory = aggregatedContent || null;
+          finalContentForHistory = aggregatedContent || null;
         }
 
         responseMessage = {
@@ -3137,54 +3357,54 @@ const askAI = async (forceSend = false) => {
       } else {
         // --- 非流式处理 ---
         const response = await window.api.createChatCompletion(requestParams);
-        
-        if (apiType === 'responses') {
-            let contentText = "";
-            let toolCalls = [];
-            let reasoningText = "";
-            
-            if (response.output_text) {
-                contentText = response.output_text;
-            } 
-            
-            // 完整解析 output 数组
-            if (response.output && Array.isArray(response.output)) {
-                response.output.forEach(item => {
-                    // 1. Message
-                    if (item.type === 'message' && item.content) {
-                        item.content.forEach(c => {
-                            if (c.type === 'output_text') contentText += c.text;
-                        });
-                    } 
-                    // 2. Tool Calls
-                    else if (item.type === 'function_call') {
-                        toolCalls.push({
-                            id: item.call_id || item.id,
-                            type: 'function',
-                            function: {
-                                name: item.name,
-                                arguments: item.arguments
-                            }
-                        });
-                    } 
-                    // 3. Reasoning
-                    else if (item.type === 'reasoning' && item.summary) {
-                        item.summary.forEach(s => {
-                            if (s.type === 'summary_text') reasoningText += s.text;
-                        });
-                    }
-                });
-            }
 
-            responseMessage = {
-                role: 'assistant',
-                content: contentText || null,
-                reasoning_content: reasoningText || null,
-                tool_calls: toolCalls.length > 0 ? toolCalls : undefined
-            };
+        if (apiType === 'responses') {
+          let contentText = "";
+          let toolCalls = [];
+          let reasoningText = "";
+
+          if (response.output_text) {
+            contentText = response.output_text;
+          }
+
+          // 完整解析 output 数组
+          if (response.output && Array.isArray(response.output)) {
+            response.output.forEach(item => {
+              // 1. Message
+              if (item.type === 'message' && item.content) {
+                item.content.forEach(c => {
+                  if (c.type === 'output_text') contentText += c.text;
+                });
+              }
+              // 2. Tool Calls
+              else if (item.type === 'function_call') {
+                toolCalls.push({
+                  id: item.call_id || item.id,
+                  type: 'function',
+                  function: {
+                    name: item.name,
+                    arguments: item.arguments
+                  }
+                });
+              }
+              // 3. Reasoning
+              else if (item.type === 'reasoning' && item.summary) {
+                item.summary.forEach(s => {
+                  if (s.type === 'summary_text') reasoningText += s.text;
+                });
+              }
+            });
+          }
+
+          responseMessage = {
+            role: 'assistant',
+            content: contentText || null,
+            reasoning_content: reasoningText || null,
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+          };
         } else {
-            // Chat Completions
-            responseMessage = response.choices[0].message;
+          // Chat Completions
+          responseMessage = response.choices[0].message;
         }
       }
 
@@ -3200,21 +3420,21 @@ const askAI = async (forceSend = false) => {
 
       // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
-      
+
       // 更新正文
       if (responseMessage.content) {
         if (typeof responseMessage.content === 'string') {
-            currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+          currentBubble.content = [{ type: 'text', text: responseMessage.content }];
         } else if (Array.isArray(responseMessage.content)) {
-            currentBubble.content = responseMessage.content;
+          currentBubble.content = responseMessage.content;
         }
       }
-      
+
       // 更新思考内容并标记结束
       if (responseMessage.reasoning_content) {
         currentBubble.reasoning_content = responseMessage.reasoning_content;
         // 关键：非流式下如果存在思考内容，必须将 status 设为 end 才能正确显示
-        currentBubble.status = 'end'; 
+        currentBubble.status = 'end';
       }
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -3286,15 +3506,15 @@ const askAI = async (forceSend = false) => {
                   baseUrl: currentBaseUrl,
                   model: currentModelName,
                   tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
-                  mcpSystemPrompt: mcpSystemPromptStr, 
+                  mcpSystemPrompt: mcpSystemPromptStr,
                   onUpdate: onUpdateCallback,
-                  apiType: apiType 
+                  apiType: apiType
                 };
 
                 toolContent = await window.api.resolveSkillInvocation(
                   currentConfig.value.skillPath,
                   toolArgs.skill,
-                  toolArgs, 
+                  toolArgs,
                   executionContext,
                   toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal
                 );
@@ -3335,7 +3555,7 @@ const askAI = async (forceSend = false) => {
                     tools: toolsContext,
                     mcpSystemPrompt: mcpSystemPromptStr,
                     onUpdate: onUpdateCallback,
-                    apiType: apiType 
+                    apiType: apiType
                   };
                 }
 
@@ -3453,12 +3673,51 @@ const askAI = async (forceSend = false) => {
     signalController.value = null;
     if (currentAssistantChatShowIndex > -1) {
       const endTime = Date.now();
-      chat_show.value[currentAssistantChatShowIndex].endTime = endTime; 
+      chat_show.value[currentAssistantChatShowIndex].endTime = endTime;
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
     await nextTick();
     chatInputRef.value?.focus({ cursor: 'end' });
-    autoSaveSession();
+
+    if (currentTaskConfig.value) {
+      let savedFileName = '未保存';
+      try {
+        if (currentTaskConfig.value.autoSave && currentConfig.value.webdav?.localChatPath) {
+          // 构造文件名：任务名-时间
+          const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[\/ :]/g, '-').replace(/,/g, '');
+          defaultConversationName.value = `${currentTaskConfig.value.name}-${timeStr}`;
+          const sessionData = getSessionDataAsObject();
+          const jsonString = JSON.stringify(sessionData, null, 2);
+
+          const separator = currentOS.value === 'win' ? '\\' : '/';
+          const filePath = `${currentConfig.value.webdav.localChatPath}${separator}${defaultConversationName.value}.json`;
+
+          await window.api.writeLocalFile(filePath, jsonString);
+          savedFileName = `${defaultConversationName.value}.json`;
+        }
+        // 将历史记录写入主配置
+        await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          time: Date.now(),
+          status: 'success',
+          file: savedFileName
+        });
+
+        // 自动关闭窗口
+        if (currentTaskConfig.value.autoClose) {
+          window.api.windowControl('close-window');
+        }
+      } catch (taskErr) {
+        console.error("Task Finalize Error:", taskErr);
+        await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          time: Date.now(),
+          status: 'error',
+          file: '报错'
+        });
+      }
+      currentTaskConfig.value = null; // 清空标记，避免后续手动问答也触发
+    } else {
+      autoSaveSession(); // 普通对话的自动保存
+    }
   }
 };
 
@@ -3780,7 +4039,7 @@ const navMessages = computed(() => {
 
 const getMessagePreviewText = (message) => {
   let text = '';
-  
+
   // 1. 尝试获取文本内容
   if (typeof message.content === 'string') {
     text = message.content;
@@ -3793,7 +4052,7 @@ const getMessagePreviewText = (message) => {
       const filePart = message.content.find(p => p.type === 'file' || p.type === 'input_file');
       const imgPart = message.content.find(p => p.type === 'image_url');
       const audioPart = message.content.find(p => p.type === 'input_audio');
-      
+
       if (filePart) {
         // 优先显示文件名
         text = `[文件] ${filePart.filename || filePart.name || '未知文件'}`;
@@ -3810,7 +4069,7 @@ const getMessagePreviewText = (message) => {
     const toolNames = message.tool_calls.map(t => t.name).join(', ');
     text = `调用工具: ${toolNames}`;
   }
-  
+
   // 4. AI 思考中状态
   if (!text && message.role === 'assistant' && message.status === 'thinking') {
     text = '思考中...';
@@ -3853,7 +4112,8 @@ const scrollToMessageByIndex = (index) => {
         @open-search="handleOpenSearch" />
 
       <div class="main-area-wrapper">
-        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick" @scroll="handleScroll">
+        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick"
+          @scroll="handleScroll">
           <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
             @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
@@ -3866,21 +4126,25 @@ const scrollToMessageByIndex = (index) => {
         </el-main>
 
         <div class="unified-nav-sidebar" v-if="chat_show.length > 0">
-          
+
           <!-- 上部控制区 -->
           <div class="nav-group top">
             <el-tooltip content="回到顶部" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="scrollToTop">
                 <el-icon :size="16">
                   <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                    <path d="M199.36 572.768a31.904 31.904 0 0 0 22.624-9.376l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248L538.752 201.376a32 32 0 0 0-45.28 0L176.704 518.144a31.968 31.968 0 0 0 22.656 54.624z m339.424-115.392a32 32 0 0 0-45.28 0L176.736 774.144a31.968 31.968 0 1 0 45.248 45.248l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248l-308.32-308.352z"></path>
+                    <path
+                      d="M199.36 572.768a31.904 31.904 0 0 0 22.624-9.376l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248L538.752 201.376a32 32 0 0 0-45.28 0L176.704 518.144a31.968 31.968 0 0 0 22.656 54.624z m339.424-115.392a32 32 0 0 0-45.28 0L176.736 774.144a31.968 31.968 0 1 0 45.248 45.248l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248l-308.32-308.352z">
+                    </path>
                   </svg>
                 </el-icon>
               </div>
             </el-tooltip>
             <el-tooltip content="上一条消息" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="navigateToPreviousMessage">
-                <el-icon><ArrowUp /></el-icon>
+                <el-icon>
+                  <ArrowUp />
+                </el-icon>
               </div>
             </el-tooltip>
           </div>
@@ -3888,24 +4152,14 @@ const scrollToMessageByIndex = (index) => {
           <div class="nav-timeline-area">
             <div class="timeline-track"></div>
             <div class="timeline-scroller no-scrollbar">
-              <div 
-                v-for="msg in navMessages" 
-                :key="msg.id"
-                class="timeline-node-wrapper"
-                @click="scrollToMessageByIndex(msg.originalIndex)"
-              >
-                <el-tooltip 
-                  :content="getMessagePreviewText(msg)" 
-                  placement="left" 
-                  :show-after="200"
-                  :enterable="false"
-                  effect="dark"
-                >
-                  <div class="timeline-node" 
-                       :class="[
-                         msg.role, 
-                         { 'active': focusedMessageIndex === msg.originalIndex }
-                       ]">
+              <div v-for="msg in navMessages" :key="msg.id" class="timeline-node-wrapper"
+                @click="scrollToMessageByIndex(msg.originalIndex)">
+                <el-tooltip :content="getMessagePreviewText(msg)" placement="left" :show-after="200" :enterable="false"
+                  effect="dark">
+                  <div class="timeline-node" :class="[
+                    msg.role,
+                    { 'active': focusedMessageIndex === msg.originalIndex }
+                  ]">
                   </div>
                 </el-tooltip>
               </div>
@@ -3916,17 +4170,20 @@ const scrollToMessageByIndex = (index) => {
           <div class="nav-group bottom">
             <el-tooltip :content="nextButtonTooltip" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="navigateToNextMessage">
-                <el-icon><ArrowDown /></el-icon>
+                <el-icon>
+                  <ArrowDown />
+                </el-icon>
               </div>
             </el-tooltip>
-            
+
             <el-tooltip content="跳到底部" placement="left" :show-after="500">
-              <div class="nav-mini-btn" 
-                   :class="{ 'highlight-bottom': showScrollToBottomButton }" 
-                   @click="forceScrollToBottom">
+              <div class="nav-mini-btn" :class="{ 'highlight-bottom': showScrollToBottomButton }"
+                @click="forceScrollToBottom">
                 <el-icon :size="16">
                   <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                    <path d="M493.504 558.144a31.904 31.904 0 0 0 45.28 0l308.352-308.352a31.968 31.968 0 1 0-45.248-45.248L516.16 490.272 221.984 196.128a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768z m308.384-97.568L516.16 746.304 222.016 452.16a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768a31.904 31.904 0 0 0 45.28 0l308.352-308.352a32 32 0 1 0-45.28-45.248z"></path>
+                    <path
+                      d="M493.504 558.144a31.904 31.904 0 0 0 45.28 0l308.352-308.352a31.968 31.968 0 1 0-45.248-45.248L516.16 490.272 221.984 196.128a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768z m308.384-97.568L516.16 746.304 222.016 452.16a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768a31.904 31.904 0 0 0 45.28 0l308.352-308.352a32 32 0 1 0-45.28-45.248z">
+                    </path>
                   </svg>
                 </el-icon>
               </div>
@@ -3942,7 +4199,8 @@ const scrollToMessageByIndex = (index) => {
           :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" @submit="handleSubmit" @cancel="handleCancel"
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
-          @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle" @open-skill-dialog="toggleSkillDialog" />
+          @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
+          @open-skill-dialog="toggleSkillDialog" />
       </div>
     </el-container>
   </main>
@@ -3965,12 +4223,13 @@ const scrollToMessageByIndex = (index) => {
   </el-dialog>
 
   <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
-    @close="imageViewerVisible = false" @switch="(idx) => currentImageViewerIndex = idx" :hide-on-click-modal="true" teleported />
+    @close="imageViewerVisible = false" @switch="(idx) => currentImageViewerIndex = idx" :hide-on-click-modal="true"
+    teleported />
   <div v-if="imageViewerVisible" class="custom-viewer-actions">
-    <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
-      title="复制图片" />
-    <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
-      title="下载图片" />
+    <el-button type="primary" :icon="DocumentCopy" circle
+      @click="handleCopyImageFromViewer(imageViewerSrcList[currentImageViewerIndex])" title="复制图片" />
+    <el-button type="primary" :icon="Download" circle
+      @click="handleDownloadImageFromViewer(imageViewerSrcList[currentImageViewerIndex])" title="下载图片" />
   </div>
 
   <el-dialog v-model="isMcpDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog" @close="focusOnInput"
@@ -3980,17 +4239,18 @@ const scrollToMessageByIndex = (index) => {
     </template>
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
-        <el-button-group>
-          <el-button :type="mcpFilter === 'all' ? 'primary' : ''" @click="mcpFilter = 'all'">全部</el-button>
-          <el-button :type="mcpFilter === 'selected' ? 'primary' : ''" @click="mcpFilter = 'selected'">已选
-          </el-button>
-          <el-button :type="mcpFilter === 'unselected' ? 'primary' : ''" @click="mcpFilter = 'unselected'">未选
-          </el-button>
-        </el-button-group>
-        <el-button-group>
-          <el-button @click="selectAllMcpServers">全选</el-button>
-          <el-button @click="clearMcpTools">清空</el-button>
-        </el-button-group>
+        <div class="filter-tags">
+          <span class="filter-tag" :class="{ active: mcpFilter === 'all' }" @click="mcpFilter = 'all'">全部</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'selected' }" @click="mcpFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'unselected' }" @click="mcpFilter = 'unselected'">未选</span>
+        </div>
+        <div class="action-tags">
+          <span class="action-tag" @click="refreshSelectedMcpServers" title="强制重新拉取选中服务的最新工具配置">
+            <el-icon :class="{ 'is-loading': isRefreshingMcp }"><Refresh /></el-icon>
+          </span>
+          <span class="action-tag" @click="selectAllMcpServers">全选</span>
+          <span class="action-tag" @click="clearMcpTools">清空</span>
+        </div>
       </div>
       <div class="mcp-server-list custom-scrollbar">
         <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item-wrapper">
@@ -4086,17 +4346,18 @@ const scrollToMessageByIndex = (index) => {
             <el-tooltip placement="top">
               <template #content>
                 持久连接各占1个名额<br>
-                所有临时连接共占1个名额
+                所有临时连接共占1个名额<br>
+                内置MCP不占用名额
               </template>
               <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
                 <QuestionFilled />
               </el-icon>
             </el-tooltip>
           </span>
-          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" style="margin-left: 40px; margin-right: 0;" />
+          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" class="bw-checkbox" style="margin-left: 40px; margin-right: 0;" />
         </div>
         <div>
-          <el-button type="primary"
+          <el-button type="primary" class="bw-btn"
             @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
         </div>
       </div>
@@ -4109,19 +4370,16 @@ const scrollToMessageByIndex = (index) => {
     </template>
 
     <div class="mcp-dialog-content">
-      <!-- 顶部工具栏 -->
       <div class="mcp-dialog-toolbar">
-        <el-button-group>
-          <el-button :type="skillFilter === 'all' ? 'primary' : ''" @click="skillFilter = 'all'">全部</el-button>
-          <el-button :type="skillFilter === 'selected' ? 'primary' : ''"
-            @click="skillFilter = 'selected'">已选</el-button>
-          <el-button :type="skillFilter === 'unselected' ? 'primary' : ''"
-            @click="skillFilter = 'unselected'">未选</el-button>
-        </el-button-group>
-        <el-button-group>
-          <el-button @click="selectAllSkills">全选</el-button>
-          <el-button @click="clearSkills">清空</el-button>
-        </el-button-group>
+        <div class="filter-tags">
+          <span class="filter-tag" :class="{ active: skillFilter === 'all' }" @click="skillFilter = 'all'">全部</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'selected' }" @click="skillFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'unselected' }" @click="skillFilter = 'unselected'">未选</span>
+        </div>
+        <div class="action-tags">
+          <span class="action-tag" @click="selectAllSkills">全选</span>
+          <span class="action-tag" @click="clearSkills">清空</span>
+        </div>
       </div>
 
       <!-- 列表区域 -->
@@ -4191,7 +4449,7 @@ const scrollToMessageByIndex = (index) => {
             Skill 依赖内置 MCP 服务，请勿禁用
           </span>
         </div>
-        <el-button type="primary" @click="handleSkillSelectionConfirm">确定</el-button>
+        <el-button type="primary" class="bw-btn" @click="handleSkillSelectionConfirm">确定</el-button>
       </div>
     </template>
   </el-dialog>
@@ -4611,9 +4869,47 @@ html.dark .mcp-dialog-footer-search {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   flex-shrink: 0;
-  padding: 0 5px;
+  padding: 0 4px;
+}
+
+.filter-tags, .action-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-tag, .action-tag {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.5, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.filter-tag:hover, .action-tag:hover {
+  background-color: var(--el-fill-color-darker);
+  color: var(--el-text-color-primary);
+}
+
+.filter-tag.active {
+  background-color: var(--el-text-color-primary);
+  color: var(--el-bg-color);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+html.dark .filter-tag.active {
+  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.15);
 }
 
 .mcp-server-list {
@@ -4943,7 +5239,7 @@ html.dark .app-container {
   right: 12px;
   top: 40%;
   transform: translateY(-50%);
-  max-height: 60vh; 
+  max-height: 60vh;
   width: 24px;
   z-index: 90;
   display: flex;
@@ -4971,19 +5267,19 @@ html.dark .app-container {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  
+
   color: #2c2c2c;
   background-color: transparent !important;
   border: none;
   box-shadow: none;
-  
+
   transition: all 0.2s ease;
-  font-size: 14px; 
+  font-size: 14px;
   border-radius: 4px;
 
   &:hover {
     color: #000;
-    background-color: transparent; 
+    background-color: transparent;
     transform: scale(1.2);
   }
 }
@@ -4995,9 +5291,9 @@ html.dark .app-container {
   width: 100%;
   display: flex;
   justify-content: center;
-  overflow: hidden; 
+  overflow: hidden;
   flex-direction: column;
-  min-height: 0;   
+  min-height: 0;
   pointer-events: auto;
 }
 
@@ -5024,15 +5320,19 @@ html.dark .app-container {
   align-items: center;
   gap: 6px;
   padding: 4px 0;
-  
-  &::-webkit-scrollbar { display: none; }
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
   scrollbar-width: none;
 }
 
 /* 消息节点 */
 .timeline-node-wrapper {
   width: 100%;
-  height: 8px; /* 减小高度，让横线更紧凑 */
+  height: 8px;
+  /* 减小高度，让横线更紧凑 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5041,12 +5341,13 @@ html.dark .app-container {
   position: relative;
 
   /* 增加悬浮热区高度 */
-  padding: 2px 0; 
+  padding: 2px 0;
 
   &:hover .timeline-node {
-    transform: scaleX(1.5) scaleY(1.2); /* 横向拉长效果 */
+    transform: scaleX(1.5) scaleY(1.2);
+    /* 横向拉长效果 */
   }
-  
+
   &:hover .node-tooltip {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -5057,34 +5358,38 @@ html.dark .app-container {
 .timeline-node {
   /* 变成短横线 */
   width: 10px;
-  height: 3px; 
-  border-radius: 2px; /* 微圆角 */
-  
+  height: 3px;
+  border-radius: 2px;
+  /* 微圆角 */
+
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  box-shadow: none; 
+  box-shadow: none;
   border: none;
-  opacity: 0.6; /* 默认半透明，不抢眼 */
+  opacity: 0.6;
+  /* 默认半透明，不抢眼 */
 
   &.user {
     background-color: var(--el-color-primary);
   }
 
   &.assistant {
-    background-color: #000000; 
+    background-color: #000000;
   }
 
   /* 当前聚焦的消息：高亮、变宽、完全不透明 */
   &.active {
     opacity: 1;
-    width: 16px; /* 激活时变长 */
-    box-shadow: 0 0 4px rgba(255,215,0,0.5);
+    width: 16px;
+    /* 激活时变长 */
+    box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
   }
 }
 
 /* 悬浮提示框 (Tooltip) */
 .node-tooltip {
   position: absolute;
-  right: 28px; /* 点的左侧 */
+  right: 28px;
+  /* 点的左侧 */
   top: 50%;
   transform: translateY(-50%) translateX(10px) scale(0.9);
   background-color: var(--el-color-black);
@@ -5097,7 +5402,7 @@ html.dark .app-container {
   opacity: 0;
   visibility: hidden;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5110,10 +5415,12 @@ html.dark {
     background-color: #2c2c2c;
     border-color: #4c4c4c;
     color: #a3a6ad;
+
     &:hover {
       background-color: transparent;
       color: #fff;
     }
+
     &.highlight-bottom {
       background-color: rgba(64, 158, 255, 0.2);
       color: #409eff;
@@ -5123,15 +5430,17 @@ html.dark {
 
   /* 强制区分颜色 */
   .timeline-node.user {
-    background-color: #409eff; /* 用户：强制蓝色 */
+    background-color: #409eff;
+    /* 用户：强制蓝色 */
     border-color: #409eff;
   }
 
   .timeline-node.assistant {
-    background-color: #ffffff; /* AI：强制纯白 */
+    background-color: #ffffff;
+    /* AI：强制纯白 */
     border-color: #ffffff;
   }
-  
+
   .timeline-track {
     background-color: #4c4c4c;
   }
@@ -5596,5 +5905,105 @@ html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pr
 /* 确保深色模式下样式正常 */
 html.dark .subagent-toggle-btn-small:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.bw-btn.el-button--primary {
+  /* 浅色下变黑底，深色下变白底 */
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+  /* 浅色下变白字，深色下变黑字 */
+  color: var(--el-bg-color) !important;
+  font-weight: 600;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.bw-btn.el-button--primary:hover {
+  opacity: 0.85;
+}
+
+.bw-btn.el-button--primary:active {
+  transform: scale(0.96);
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  border-color: var(--el-bg-color) !important;
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: var(--el-text-color-primary) !important;
+  font-weight: 600;
+}
+
+.bw-checkbox :deep(.el-checkbox__inner:hover) {
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item-wrapper:has(.mcp-server-item.is-checked) {
+  border-color: var(--el-text-color-primary) !important; /* 黑/白边框 */
+  background-color: var(--el-fill-color-light) !important; /* 浅灰背景 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* 轻微浮起感 */
+}
+
+.mcp-server-item-wrapper:hover {
+  border-color: var(--el-text-color-primary) !important;
+  background-color: var(--el-fill-color) !important;
+}
+
+.mcp-server-item.is-checked {
+  background-color: transparent !important; /* 让位给外层容器 */
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  border-color: var(--el-bg-color) !important;
+}
+
+.mcp-server-item .el-tag {
+  background-color: transparent !important;
+  border-color: var(--el-border-color-darker) !important;
+  color: var(--el-text-color-secondary) !important;
+  transition: all 0.2s;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-focus .el-checkbox__inner),
+.mcp-server-item :deep(.el-checkbox__inner:hover) {
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+.mcp-server-item :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
+  background-color: var(--el-bg-color) !important;
+}
+
+.mcp-server-item.is-checked .el-tag,
+.mcp-server-item-wrapper:hover .el-tag {
+  border-color: var(--el-text-color-primary) !important;
+  color: var(--el-text-color-primary) !important;
+  font-weight: 500;
+}
+
+.mcp-server-item .el-tag.type-tag {
+  background-color: var(--el-fill-color) !important;
+}
+
+html.dark .mcp-server-item-wrapper:has(.mcp-server-item.is-checked) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none;
+}
+
+html.dark .mcp-server-item .el-tag {
+  border-color: #4C4D4F !important;
 }
 </style>

@@ -4,7 +4,7 @@ const os = require('os');
 const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
-const { createChatCompletion } = require('./chat.js'); 
+const { createChatCompletion } = require('./chat.js');
 
 const isWin = process.platform === 'win32';
 const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform === 'darwin' ? 'macOS' : 'Linux');
@@ -12,7 +12,58 @@ const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform =
 // --- Bash Session State ---
 let bashCwd = os.homedir();
 
-const MAX_READ = 512 * 1000; // 512k characters
+const backgroundShells = new Map();
+const MAX_BG_LOG_SIZE = 1024 * 1024; // 1MB 日志上限
+
+function appendBgLog(id, text) {
+    const proc = backgroundShells.get(id);
+    if (!proc) return;
+    proc.logs += text;
+    if (proc.logs.length > MAX_BG_LOG_SIZE) {
+        proc.logs = "[...Logs Truncated...]\n" + proc.logs.slice(proc.logs.length - (MAX_BG_LOG_SIZE / 2));
+    }
+}
+
+// 引入 IPC 用于子窗口通信
+let ipcRenderer = null;
+try { ipcRenderer = require('electron').ipcRenderer; } catch (e) {}
+
+// 判断是否为独立窗口 (通过 location 判断或 API 特征)
+function isChildWindow() {
+    if (typeof utools !== 'undefined' && typeof utools.getWindowType === 'function') {
+        return utools.getWindowType() === 'browser';
+    }
+    return false;
+}
+
+// 子窗口呼叫父进程的 Promise 包装器
+async function callParentShell(action, payload) {
+    return new Promise((resolve, reject) => {
+        const requestId = Math.random().toString(36).substr(2);
+        
+        // 监听一次性回复
+        const handler = (event, response) => {
+            if (response.requestId === requestId) {
+                ipcRenderer.off('background-shell-reply', handler);
+                if (response.error) reject(new Error(response.error));
+                else resolve(response.data);
+            }
+        };
+        
+        ipcRenderer.on('background-shell-reply', handler);
+        
+        // 发送请求给 preload.js
+        utools.sendToParent('background-shell-request', { requestId, action, payload });
+        
+        // 30s 超时
+        setTimeout(() => {
+            ipcRenderer.off('background-shell-reply', handler);
+            reject(new Error("Timeout waiting for background shell response"));
+        }, 30000); 
+    });
+}
+
+const MAX_READ = 256 * 1000; // 512k characters
 
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
@@ -67,7 +118,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
                 }
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 
     // --- 1. 常规 DOM 容器提取 ---
     const cookedMatch = text.match(/<div[^>]*class=["'][^"']*cooked[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
@@ -90,7 +141,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     // --- 代码块保护机制 ---
     // 在移除 HTML 标签前，先提取代码块并用占位符替换，防止代码块内的 <tag> 被误删
     const codeBlockPlaceholders = [];
-    
+
     // 处理 <pre><code>...</code></pre>
     text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
         // 解码 HTML 实体，还原 <meta-directives> 等内容
@@ -100,7 +151,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
             .replace(/&amp;/g, '&')
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
-        
+
         const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
         codeBlockPlaceholders.push(`\n\`\`\`\n${decodedCode}\n\`\`\`\n`);
         return placeholder;
@@ -230,6 +281,26 @@ const BUILTIN_SERVERS = {
         isPersistent: false,
         tags: ["agent"],
         logoUrl: "https://s2.loli.net/2026/01/22/tTsJjkpiOYAeGdy.png"
+    },
+    "builtin_tasks": {
+        id: "builtin_tasks",
+        name: "Task Manager",
+        description: "管理 Anywhere 的定时任务。可以检索、创建、启用、禁用和删除定时任务。",
+        type: "builtin",
+        isActive: true,
+        isPersistent: false,
+        tags: ["task", "schedule", "cron"],
+        logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Commons-logo.svg"
+    },
+    "builtin_time": {
+        id: "builtin_time",
+        name: "Time Service",
+        description: "获取当前系统时间或指定时区的时间。",
+        type: "builtin",
+        isActive: true,
+        isPersistent: false,
+        tags: ["time", "clock"],
+        logoUrl: "https://api.iconify.design/lucide:clock.svg"
     },
 };
 
@@ -376,26 +447,59 @@ const BUILTIN_TOOLS = {
     "builtin_bash": [
         {
             name: "execute_bash_command",
-            description: `Execute a shell command on the current ${currentOS} system.
-IMPORTANT: The underlying shell is **${isWin ? "PowerShell" : "Bash"}**.
-- If on Windows: You MUST use PowerShell syntax (e.g., 'New-Item -ItemType Directory', 'if (Test-Path path) {}'). DO NOT use CMD/Batch syntax (like 'if exist') unless you explicitly wrap it in 'cmd /c'.
-- If on Linux/macOS: Use standard Bash syntax.
-Note: Long-running commands will be terminated after timeout.`,
+            description: `Execute a shell command.
+IMPORTANT:
+1. The underlying shell is **${currentOS}**:**${isWin ? "PowerShell" : "Bash"}**. Adjust syntax accordingly.
+2. **Long-running processes**: For servers (e.g. 'npm run dev', 'python server.py') or tasks taking >15s, YOU MUST set 'background': true.
+3. When 'background': true, you will receive a 'shell_id' immediately. Use 'read_background_shell_output' to check logs and 'kill_background_shell' to stop it.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    command: { 
-                        type: "string", 
-                        // 在参数描述中再次强调环境
-                        description: `The command to execute. Ensure syntax matches ${isWin ? 'PowerShell' : 'Bash'}.` 
+                    command: {
+                        type: "string",
+                        description: `The command to execute.`
+                    },
+                    background: {
+                        type: "boolean",
+                        description: "Set to true for long-running tasks, servers, or watchers. Returns a shell_id immediately.",
+                        default: false
                     },
                     timeout: {
                         type: "integer",
-                        description: "Optional. Timeout in milliseconds. Default is 15000 (15 seconds). Set higher (e.g., 300000 for 5 mins) for long-running tasks like installations.",
+                        description: "Only for foreground tasks (background=false). Timeout in ms. Default 15000.",
                         default: 15000
                     }
                 },
                 required: ["command"]
+            }
+        },
+        {
+            name: "list_background_shells",
+            description: "List all currently running background shell processes started by this agent's tool.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "read_background_shell_output",
+            description: "Read stdout/stderr logs from a background shell process. Supports pagination.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    shell_id: { type: "string", description: "The ID returned when starting the background task." },
+                    offset: { type: "integer", description: "Character offset to start reading from (for scrolling logs).", default: 0 },
+                    length: { type: "integer", description: "Number of characters to read.", default: MAX_READ }
+                },
+                required: ["shell_id"]
+            }
+        },
+        {
+            name: "kill_background_shell",
+            description: "Terminate a background shell process.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    shell_id: { type: "string", description: "The ID of the process to kill." }
+                },
+                required: ["shell_id"]
             }
         }
     ],
@@ -457,6 +561,137 @@ Note: Long-running commands will be terminated after timeout.`,
                     }
                 },
                 required: ["task", "tools"]
+            }
+        }
+    ],
+    // 大约在第 380 行附近，找到 "builtin_tasks" 的定义，替换为以下代码：
+    "builtin_tasks": [
+        {
+            name: "list_agents",
+            description: "List all available Agents (Quick Prompts). Use this to find the exact 'agent_name' for creating or editing tasks.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "list_mcp_servers",
+            description: "List all MCP servers with their IDs and descriptions available for scheduled tasks. Use this to find the exact 'id' for assigning 'extra_mcp' to a scheduled task.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "list_tasks",
+            description: "List scheduled tasks. By default, it returns a summary (ID and Name). If 'task_name_or_id' is provided, it returns full details for that specific task.",
+            inputSchema: { 
+                type: "object", 
+                properties: {
+                    task_name_or_id: { type: "string", description: "Optional. Provide a Task ID or Name to view detailed configuration (including schedule, instructions, etc.)." }
+                } 
+            }
+        },
+        {
+            name: "create_task",
+            description: "Create a new scheduled task.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    name: { type: "string", description: "Task name: concise, clear, and unique." },
+                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
+                    agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
+                    schedule_type: { 
+                        type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"], 
+                        description: "Type of schedule. 'interval'(every X mins), 'daily'(fixed time), 'weekly'(fixed days in week), 'monthly'(fixed dates in month)." 
+                    },
+                    time_param: { type: "string", description: "For 'interval': number of minutes. For others: HH:mm format." },
+                    interval_time_ranges: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "Optional. Active time ranges for 'interval' only. Format: ['HH:mm-HH:mm']. If omitted, runs 24h." 
+                    },
+                    weekly_days: {
+                        type: "array",
+                        items: { type: "integer" },
+                        description: "Optional. Required for 'weekly'. Array of weekdays (0-6, 0=Sunday). e.g. [1,2,3,4,5] for weekdays."
+                    },
+                    monthly_days: {
+                        type: "array",
+                        items: { type: "integer" },
+                        description: "Optional. Required for 'monthly'. Array of dates in month (1-31). e.g. [1, 15, 28]."
+                    },
+                    single_date: { 
+                        type: "string", 
+                        description: "Optional. Required for 'single'. Format: YYYY-MM-DD (e.g. 2026-03-05). Defaults to today if omitted." 
+                    },
+                    enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true },
+                    extra_mcp: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Array of MCP server IDs to enable for this task. By default, all built-in MCP servers are automatically assigned. Only specify this if you need 3rd-party MCPs."
+                    },
+                    extra_skills: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Array of Skill names to enable for this task. Defaults to empty. You should only assign skills that are relevant to the task."
+                    }
+                },
+                required: ["name", "instruction", "schedule_type", "time_param"]
+            }
+        },
+        {
+            name: "edit_task",
+            description: "Edit specific parameters of an existing scheduled task.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string" },
+                    new_name: { type: "string" },
+                    instruction: { type: "string",description: "New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
+                    agent_name: { type: "string" },
+                    schedule_type: { type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"] },
+                    time_param: { type: "string" },
+                    single_date: { type: "string", description: "Format: YYYY-MM-DD" },
+                    interval_time_ranges: { type: "array", items: { type: "string" } },
+                    weekly_days: { type: "array", items: { type: "integer" } },
+                    monthly_days: { type: "array", items: { type: "integer" } },
+                    extra_mcp: { type: "array", items: { type: "string" } },
+                    extra_skills: { type: "array", items: { type: "string" } }
+                },
+                required: ["task_name_or_id"]
+            }
+        },
+        {
+            name: "control_task",
+            description: "Enable or disable an existing task by its name or ID.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string", description: "The name or ID of the task." },
+                    enable: { type: "boolean", description: "True to enable, False to disable." }
+                },
+                required: ["task_name_or_id", "enable"]
+            }
+        },
+        {
+            name: "delete_task",
+            description: "Delete a task permanently.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string", description: "The name or ID of the task to delete." }
+                },
+                required: ["task_name_or_id"]
+            }
+        }
+    ],
+    "builtin_time": [
+        {
+            name: "get_current_time",
+            description: "Get the current time and date. You can optionally specify a timezone. Returns current time, date, and day of the week.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    timezone: { 
+                        type: "string", 
+                        description: "Optional. The timezone to get the time for, e.g., 'Asia/Shanghai', 'America/New_York', 'UTC'. If omitted, returns the local system time." 
+                    }
+                }
             }
         }
     ],
@@ -699,7 +934,7 @@ async function runSubAgent(args, globalContext, signal) {
     }
 
     // --- 2. 步骤控制 ---
-    let MAX_STEPS = 20; 
+    let MAX_STEPS = 20;
     if (planning_level === 'fast') MAX_STEPS = 10;
     else if (planning_level === 'high') MAX_STEPS = 30;
     else if (planning_level === 'custom' && custom_steps) MAX_STEPS = Math.min(100, Math.max(10, custom_steps));
@@ -898,8 +1133,8 @@ ${userContext || 'No additional context provided.'}
 
         let summaryContent = "";
         if (currentApiType === 'responses' && summaryResponse.output) {
-             const textItems = summaryResponse.output.filter(item => item.type === 'message');
-             textItems.forEach(item => {
+            const textItems = summaryResponse.output.filter(item => item.type === 'message');
+            textItems.forEach(item => {
                 if (item.content) {
                     item.content.forEach(c => {
                         if (c.type === 'output_text') summaryContent += c.text;
@@ -990,7 +1225,7 @@ const handlers = {
             }
 
             let rootDir = resolvePath(searchPath);
-            
+
             const parsed = path.parse(rootDir);
             if (parsed.root === rootDir && rootDir.length <= 3) {
                 // Windows: C:\, Linux/Mac: /
@@ -1046,19 +1281,17 @@ const handlers = {
         }
     },
 
-    // 2. Grep Search
+    // 2. Grep Search (优化版：提供详细上下文、行号、列号)
     grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
             if (!searchPath) {
                 return "Error: You MUST provide a 'path' argument to specify the directory.";
             }
             if (!pattern) {
-                return "Error: You MUST provide a 'pattern' argument. Do not put it inside a 'description' field.";
+                return "Error: You MUST provide a 'pattern' argument.";
             }
 
             const rootDir = resolvePath(searchPath);
-
-            // 安全检查：禁止扫描根目录
             const parsed = path.parse(rootDir);
             if (parsed.root === rootDir && rootDir.length <= 3) {
                 return `Error: Grep searching the system root directory ('${rootDir}') is not allowed. Please specify a project directory.`;
@@ -1073,17 +1306,17 @@ const handlers = {
             } catch (e) { return `Invalid Regex: ${e.message}`; }
 
             if (searchRegex.test("")) {
-                return `Error: The regex pattern '${pattern}' matches empty strings (e.g., .* or \\s*). This will match every character boundary and crash the search. Please use a more specific pattern (e.g., .+ instead of .*).`;
+                return `Error: The regex pattern '${pattern}' matches empty strings.`;
             }
-            searchRegex.lastIndex = 0; // 重置正则状态
+            searchRegex.lastIndex = 0;
 
             const globRegex = glob ? globToRegex(glob) : null;
             const normalizedRoot = normalizePath(rootDir);
 
             const results = [];
             let matchCount = 0;
-            const MAX_SCANNED = 5000; 
-            const MAX_RESULTS_LINES = 1000; // 强制防线3：限制最大返回结果数，防止 Token 爆炸
+            const MAX_SCANNED = 5000;
+            const MAX_RESULTS_BLOCKS = 100;
             let scanned = 0;
 
             for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
@@ -1097,7 +1330,6 @@ const handlers = {
                     const normalizedFilePath = normalizePath(filePath);
                     let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                     if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
-
                     if (!globRegex.test(relativePath) && !globRegex.test(path.basename(filePath))) continue;
                 }
 
@@ -1106,7 +1338,7 @@ const handlers = {
 
                 try {
                     const stats = await fs.promises.stat(filePath);
-                    if (stats.size > 1024 * 1024) continue; 
+                    if (stats.size > 2 * 1024 * 1024) continue;
 
                     const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal });
 
@@ -1114,7 +1346,7 @@ const handlers = {
                         if (searchRegex.test(content)) {
                             results.push(filePath);
                             searchRegex.lastIndex = 0;
-                            if (results.length >= MAX_RESULTS_LINES) break; // 熔断
+                            if (results.length >= MAX_RESULTS_BLOCKS) break;
                         }
                     } else {
                         const matches = [...content.matchAll(searchRegex)];
@@ -1123,28 +1355,53 @@ const handlers = {
                             if (output_mode === 'count') continue;
 
                             const lines = content.split(/\r?\n/);
+                            
                             for (const m of matches) {
-                                if (results.length >= MAX_RESULTS_LINES) break; // 熔断
+                                if (results.length >= MAX_RESULTS_BLOCKS) break;
 
                                 const offset = m.index;
-                                const lineNum = content.substring(0, offset).split(/\r?\n/).length;
+                                const matchLen = m[0].length;
                                 
-                                let previewText = m[0].replace(/\r?\n/g, ' ').trim();
-                                if (previewText.length > 150) {
-                                    previewText = previewText.substring(0, 150) + '...';
-                                } else if (previewText.length < 10) {
-                                    previewText = lines[lineNum - 1].trim().substring(0, 150);
+                                // 计算行号 (1-based)
+                                const preMatch = content.substring(0, offset);
+                                const lineNum = preMatch.split(/\r?\n/).length;
+                                
+                                // 计算列号 (1-based)
+                                const lastNewLinePos = preMatch.lastIndexOf('\n');
+                                const colNum = offset - lastNewLinePos; 
+
+                                // 计算匹配结束行号 (处理多行匹配)
+                                const matchText = m[0];
+                                const newLinesInMatch = (matchText.match(/\n/g) || []).length;
+                                const endLineNum = lineNum + newLinesInMatch;
+
+                                // 获取上下文 (前后 20 行)
+                                const contextLines = 20;
+                                const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
+                                const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
+                                
+                                let contextBlock = "";
+                                for (let i = startLineIdx; i < endLineIdx; i++) {
+                                    const currentLineNum = i + 1;
+                                    const lineContent = lines[i];
+                                    // 使用 '>' 标记匹配覆盖的行
+                                    const marker = (currentLineNum >= lineNum && currentLineNum <= endLineNum) ? ">" : " ";
+                                    contextBlock += `${currentLineNum.toString().padEnd(4)} |${marker} ${lineContent}\n`;
                                 }
-                                
-                                results.push(`${filePath}:${lineNum}: ${previewText}`);
+
+                                const block = `[Match] ${filePath}
+Location: Line ${lineNum}, Col ${colNum} (Start Offset: ${offset})
+Context:
+${contextBlock}
+--------------------------------------------------`;
+                                results.push(block);
                             }
                         }
                     }
                 } catch (readErr) { /* ignore */ }
-                
-                // 文件级熔断退出
-                if (output_mode !== 'count' && results.length >= MAX_RESULTS_LINES) {
-                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_LINES} result lines. Please use a more specific pattern.`);
+
+                if (output_mode !== 'count' && results.length >= MAX_RESULTS_BLOCKS) {
+                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_BLOCKS} result blocks. Please use a more specific pattern.`);
                     break;
                 }
             }
@@ -1156,7 +1413,6 @@ const handlers = {
             return `Grep error: ${e.message}`;
         }
     },
-
     // 3. Read File
     read_file: async ({ file_path, offset = 0, length = MAX_READ }, context, signal) => {
         try {
@@ -1385,7 +1641,7 @@ const handlers = {
 
             if (line_number !== undefined && line_number !== null) {
                 const lines = fileContent.split(/\r?\n/);
-                const targetIndex = parseInt(line_number) - 1; 
+                const targetIndex = parseInt(line_number) - 1;
 
                 if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
                     return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
@@ -1425,94 +1681,179 @@ const handlers = {
     },
 
     // Bash / PowerShell
-    execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
-        return new Promise((resolve) => {
-            const trimmedCmd = command.trim();
+    execute_bash_command: async ({ command, background = false, timeout = 15000 }, context, signal) => {
+        const trimmedCmd = command.trim();
 
-            // 高危命令简单拦截 (保持原有逻辑)
-            const dangerousPatterns = [
-                /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i, // rm -rf / (防止误删根目录)
-                />\s*\/dev\/sd/i,     // 写入设备
-                /\bmkfs\b/i,          // mkfs 格式化
-                /\bdd\s+/i,           // dd
-                /\bwget\s+/i,         // wget 下载
-                /\bcurl\s+.*\|\s*sh/i,// curl | sh 管道执行
-                /\bchmod\s+777/i,     // chmod 777
-                /\bcat\s+.*id_rsa/i   // 读取私钥
-            ];
+        const dangerousPatterns = [
+            /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i,
+            />\s*\/dev\/sd/i,
+            /\bmkfs\b/i,
+            /\bdd\s+/i,
+            /\bwget\s+/i,
+            /\bcurl\s+.*\|\s*sh/i,
+            /\bchmod\s+777/i,
+            /\bcat\s+.*id_rsa/i
+        ];
 
-            if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
-                return resolve(`[Security Block] The command contains potentially destructive operations and has been blocked.`);
+        if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
+            return `[Security Block] The command contains potentially destructive operations and has been blocked.`;
+        }
+
+        if (background && isChildWindow()) {
+            try {
+                return await callParentShell('start', { command });
+            } catch (e) {
+                return `Error starting background task via parent: ${e.message}`;
             }
+        }
 
-            if (trimmedCmd.startsWith('cd ')) {
-                let targetDir = trimmedCmd.substring(3).trim();
-                // 简单的去引号处理
-                if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
-                    targetDir = targetDir.substring(1, targetDir.length - 1);
+        const crypto = require('crypto');
+        const scriptId = crypto.randomBytes(4).toString('hex');
+        const tempDir = os.tmpdir();
+        
+        let tempFile = '';
+        let shellToUse = '';
+        let spawnArgs = [];
+        let execCmd = '';
+
+        if (isWin) {
+            tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.ps1`);
+            const preamble = `
+$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+$PSDefaultParameterValues['*:Encoding'] = 'utf8';
+`;
+            // 添加 UTF-8 BOM (\uFEFF)，解决 PowerShell 5.1 默认按 ANSI 读取导致的 Unicode 乱码和引号配对破坏问题
+            fs.writeFileSync(tempFile, '\uFEFF' + preamble + '\n' + command, { encoding: 'utf8' });
+            shellToUse = 'powershell.exe';
+            spawnArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tempFile];
+            execCmd = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`;
+        } else {
+            tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.sh`);
+            fs.writeFileSync(tempFile, command, { encoding: 'utf8' });
+            shellToUse = '/bin/bash';
+            spawnArgs = [tempFile];
+            execCmd = `"/bin/bash" "${tempFile}"`;
+        }
+
+        const cleanupTempFile = () => {
+            try {
+                if (fs.existsSync(tempFile)) {
+                    fs.unlinkSync(tempFile);
                 }
+            } catch (e) {
+                console.error("Failed to clean up temp script:", e);
+            }
+        };
+
+        if (!background && trimmedCmd.startsWith('cd ') && trimmedCmd.split('\n').length === 1) {
+            let targetDir = trimmedCmd.substring(3).trim();
+            if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
+                targetDir = targetDir.substring(1, targetDir.length - 1);
+            }
+            try {
+                const newPath = path.resolve(bashCwd, targetDir);
+                if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
+                    bashCwd = newPath;
+                    cleanupTempFile();
+                    return `Directory changed to: ${bashCwd}`;
+                } else {
+                    cleanupTempFile();
+                    return `Error: Directory not found: ${newPath}`;
+                }
+            } catch (e) {
+                cleanupTempFile();
+                return `Error changing directory: ${e.message}`;
+            }
+        }
+
+        if (background) {
+            return new Promise((resolve) => {
+                const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                
                 try {
-                    const newPath = path.resolve(bashCwd, targetDir);
-                    if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
-                        bashCwd = newPath;
-                        return resolve(`Directory changed to: ${bashCwd}`);
-                    } else {
-                        return resolve(`Error: Directory not found: ${newPath}`);
-                    }
-                } catch (e) {
-                    return resolve(`Error changing directory: ${e.message}`);
-                }
-            }
+                    const child = require('child_process').spawn(shellToUse, spawnArgs, {
+                        cwd: bashCwd,
+                        env: { ...process.env, FORCE_COLOR: '1' },
+                        detached: !isWin 
+                    });
 
+                    backgroundShells.set(shellId, {
+                        process: child,
+                        command: command,
+                        startTime: new Date().toISOString(),
+                        logs: "",
+                        pid: child.pid,
+                        active: true
+                    });
+
+                    child.stdout.on('data', (data) => appendBgLog(shellId, data.toString()));
+                    child.stderr.on('data', (data) => appendBgLog(shellId, data.toString()));
+
+                    child.on('error', (err) => {
+                        appendBgLog(shellId, `\n[System Error]: ${err.message}\n`);
+                        const proc = backgroundShells.get(shellId);
+                        if(proc) proc.active = false;
+                        cleanupTempFile();
+                    });
+
+                    child.on('close', (code) => {
+                        appendBgLog(shellId, `\n[System]: Process exited with code ${code}\n`);
+                        const proc = backgroundShells.get(shellId);
+                        if(proc) proc.active = false;
+                        cleanupTempFile();
+                    });
+
+                    try {
+                        const parentPid = process.pid;
+                        const targetPid = child.pid;
+                        
+                        if (isWin) {
+                            const watcherCmd = `Wait-Process -Id ${parentPid} -ErrorAction SilentlyContinue; taskkill /pid ${targetPid} /T /F 2>$null`;
+                            require('child_process').spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', watcherCmd], {
+                                detached: true, stdio: 'ignore', windowsHide: true
+                            }).unref();
+                        } else {
+                            const watcherCmd = `while kill -0 ${parentPid} 2>/dev/null; do sleep 1; done; kill -9 -${targetPid} 2>/dev/null || kill -9 ${targetPid} 2>/dev/null`;
+                            require('child_process').spawn('sh', ['-c', watcherCmd], {
+                                detached: true, stdio: 'ignore'
+                            }).unref();
+                        }
+                    } catch (watcherErr) {
+                        console.error("Failed to start process watcher:", watcherErr);
+                    }
+
+                    resolve(`Background process started successfully.\nID: ${shellId}\nPID: ${child.pid}\n\nUse 'read_background_shell_output' to view logs.`);
+                } catch (e) {
+                    cleanupTempFile();
+                    resolve(`Failed to start background process: ${e.message}`);
+                }
+            });
+        }
+
+        return new Promise((resolve) => {
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
 
             let shellOptions = {
                 cwd: bashCwd,
-                encoding: 'buffer', // 关键：使用 buffer 以便手动解码
+                encoding: 'buffer',
                 maxBuffer: 1024 * 1024 * 10,
                 timeout: validTimeout
             };
 
-            let finalCommand = command;
-            let shellToUse;
-
-            if (isWin) {
-                shellToUse = 'powershell.exe';
-                // Windows 编码配置
-                // 注意：语法错误会导致这部分代码不执行，因此后续解码逻辑需要兼容 GBK
-                const preamble = `
-                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
-                    $OutputEncoding = [System.Text.Encoding]::UTF8;
-                    $PSDefaultParameterValues['*:Encoding'] = 'utf8';
-                `.replace(/\s+/g, ' ');
-
-                finalCommand = `${preamble} ${command}`;
-                shellOptions.shell = shellToUse;
-            } else {
-                shellToUse = '/bin/bash';
-                shellOptions.shell = shellToUse;
-            }
-
-            // 保存子进程引用
-            const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
-                // 解码辅助函数：增强版，支持 Windows GBK 回退
+            const child = require('child_process').exec(execCmd, shellOptions, (error, stdout, stderr) => {
+                cleanupTempFile();
+                
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
-                    
-                    // 1. 尝试 UTF-8
                     const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
                     const utf8Str = utf8Decoder.decode(buf);
 
-                    // 2. 如果在 Windows 上，且 UTF-8 解码出现了大量替换字符()，或者 stderr 报错（解析错误通常是系统默认编码 GBK），尝试 GBK
-                    if (isWin && (utf8Str.includes('') || error)) {
+                    if (isWin && (utf8Str.includes('\uFFFD') || error)) {
                         try {
-                            // Node.js 的 TextDecoder 支持 gbk (依赖系统 ICU，Electron 环境通常支持)
                             const gbkDecoder = new TextDecoder('gbk', { fatal: false });
-                            const gbkStr = gbkDecoder.decode(buf);
-                            // 简单的启发式判断：如果 GBK 解码结果看起来更正常（这里简单返回 GBK 结果）
-                            return gbkStr;
+                            return gbkDecoder.decode(buf);
                         } catch (e) {
-                            return utf8Str; // 不支持 gbk 则回退
+                            return utf8Str;
                         }
                     }
                     return utf8Str;
@@ -1523,17 +1864,20 @@ const handlers = {
                 const errStr = decodeBuffer(stderr);
 
                 if (outStr) result += outStr;
-                if (errStr) result += `\n[Stderr]: ${errStr}`;
+                
+                if (errStr) {
+                    result += `\n[Stderr/Warning]:\n${errStr}`;
+                }
 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
-                        result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
+                        result += `\n\n[System Note]: Command timed out after ${validTimeout / 1000}s. For long tasks, set 'background': true.`;
                     } else if (error.killed) {
-                        result += `\n[System Note]: Command was aborted by user.`;
+                        result += `\n\n[System Note]: Command was aborted by user.`;
                     } else {
-                        result += `\n[Error Code]: ${error.code}`;
-                        // 避免重复显示 message，因为 message 通常包含 stderr
-                        if (error.message && !errStr && !outStr) result += `\n[Message]: ${error.message}`;
+                        if (!errStr && error.message) {
+                            result += `\n\n[Execution Error]: ${error.message}`;
+                        }
                     }
                 }
 
@@ -1541,13 +1885,89 @@ const handlers = {
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
 
-            // 响应中断信号
             if (signal) {
                 signal.addEventListener('abort', () => {
-                    child.kill(); // 杀死子进程
+                    child.kill();
+                    cleanupTempFile();
                 });
             }
         });
+    },
+
+    list_background_shells: async () => {
+        if (isChildWindow()) return await callParentShell('list', {});
+
+        if (backgroundShells.size === 0) return "No active background shells.";
+        
+        let output = "ID | PID | Status | Start Time | Command\n";
+        output += "--- | --- | --- | --- | ---\n";
+        
+        backgroundShells.forEach((proc, id) => {
+            const status = proc.active ? "Running" : "Exited";
+            const cmdDisplay = proc.command.length > 30 ? proc.command.substring(0, 30) + '...' : proc.command;
+            output += `${id} | ${proc.pid} | ${status} | ${proc.startTime} | ${cmdDisplay}\n`;
+        });
+        
+        return output;
+    },
+
+    read_background_shell_output: async ({ shell_id, offset = 0, length = 5000 }) => {
+        if (isChildWindow()) return await callParentShell('read', { shell_id, offset, length });
+
+        const proc = backgroundShells.get(shell_id);
+        if (!proc) return `Error: Shell ID '${shell_id}' not found.`;
+
+        const fullLogs = proc.logs;
+        const totalLength = fullLogs.length;
+        const safeOffset = Math.max(0, offset);
+        const safeLength = Math.min(length, MAX_READ);
+
+        const chunk = fullLogs.substring(safeOffset, safeOffset + safeLength);
+        const nextOffset = safeOffset + chunk.length;
+        
+        let statusInfo = `[Process State: ${proc.active ? 'Running' : 'Exited'}]`;
+        let footer = "";
+        
+        if (nextOffset < totalLength) {
+            footer = `\n\n[System]: More output available (${totalLength - nextOffset} chars remaining). Call tool again with offset=${nextOffset}.`;
+        }
+
+        return `${statusInfo}\n(Showing chars ${safeOffset}-${nextOffset} of ${totalLength})\n----------------------------------------\n${chunk}${footer}`;
+    },
+
+    kill_background_shell: async ({ shell_id }) => {
+        if (isChildWindow()) return await callParentShell('kill', { shell_id });
+
+        const proc = backgroundShells.get(shell_id);
+        if (!proc) return `Error: Shell ID '${shell_id}' not found.`;
+
+        if (!proc.active) {
+            backgroundShells.delete(shell_id);
+            return `Process '${shell_id}' was already exited. Removed from history.`;
+        }
+
+        try {
+            const pid = proc.pid;
+            if (isWin) {
+                // Windows Tree Kill (/T)
+                require('child_process').exec(`taskkill /pid ${pid} /T /F`, (err) => {
+                    if (err) console.log('Taskkill ignored error:', err.message);
+                });
+            } else {
+                // Unix Group Kill (使用 -pid)
+                try {
+                    process.kill(-pid, 'SIGKILL'); 
+                } catch (e) {
+                    try { process.kill(pid, 'SIGKILL'); } catch(e2){}
+                }
+            }
+            
+            proc.active = false;
+            appendBgLog(shell_id, `\n[System]: Process terminated by user request (Tree Kill).\n`);
+            return `Successfully sent tree kill signal to process ${pid} (${shell_id}).`;
+        } catch (e) {
+            return `Error killing process: ${e.message}`;
+        }
     },
 
     // Web Search Handler
@@ -1706,7 +2126,381 @@ const handlers = {
             return "Error: Sub-Agent requires global context(should be in a chat session).";
         }
         return await runSubAgent(args, globalContext, signal);
-    }
+    },
+
+    // --- Task Management Handlers ---
+    list_agents: async () => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const prompts = configData.config.prompts || {};
+
+        let agentStr = "- __DEFAULT__ (The global default agent with empty prompt. Recommended for general tasks)\n";
+        Object.entries(prompts).filter(([_, p]) => p.showMode === 'window').forEach(([key]) => {
+            agentStr += `- ${key}\n`;
+        });
+
+        return `Available Agents:\n${agentStr}`;
+    },
+
+    list_mcp_servers: async () => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const mcpServers = configData.config.mcpServers || {};
+        
+        let mcpStr = "Available MCP Servers (ID - Name: Description):\n";
+        Object.entries(mcpServers).filter(([_, s]) => s.isActive).forEach(([id, s]) => {
+            mcpStr += `- ID: [${id}] - Name: [${s.name}] - Desc: ${s.description || 'No description'}\n`;
+        });
+        return mcpStr;
+    },
+
+    list_tasks: async ({ task_name_or_id }) => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+        
+        if (Object.keys(tasks).length === 0) return "No tasks found.";
+
+        if (task_name_or_id) {
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+            
+            const task = tasks[targetId];
+            let details = `### Task Details\n`;
+            details += `- ID: ${targetId}\n`;
+            details += `- Name: ${task.name}\n`;
+            details += `- Enabled: ${task.enabled}\n`;
+            details += `- Agent: ${task.promptKey}\n`;
+            details += `- Schedule Type: ${task.triggerType}\n`;
+            
+            if (task.triggerType === 'interval') {
+                details += `- Interval: Every ${task.intervalMinutes} mins\n`;
+                if (task.intervalStartTime) details += `- Daily Start Check: ${task.intervalStartTime}\n`;
+                if (task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
+                    const rangesStr = task.intervalTimeRanges.map(r => r.join('-')).join(', ');
+                    details += `- Active Ranges: [${rangesStr}]\n`;
+                } else {
+                    details += `- Active Ranges: All Day (24h)\n`;
+                }
+            } else if (task.triggerType === 'daily') {
+                details += `- Daily Time: ${task.dailyTime}\n`;
+            } else if (task.triggerType === 'weekly') {
+                details += `- Weekly Time: ${task.weeklyTime} on days [${task.weeklyDays.join(',')}]\n`;
+            } else if (task.triggerType === 'monthly') {
+                const mDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
+                details += `- Monthly Time: ${task.monthlyTime} on dates [${mDays.join(',')}]\n`;
+            } else if (task.triggerType === 'single') {
+                details += `- Single Run: ${task.singleDate} at ${task.singleTime}\n`;
+            }
+            
+            if (task.extraMcp && task.extraMcp.length > 0) details += `- Extra MCPs: [${task.extraMcp.join(', ')}]\n`;
+            if (task.extraSkills && task.extraSkills.length > 0) details += `- Extra Skills: [${task.extraSkills.join(', ')}]\n`;
+            
+            details += `\n**Instruction:**\n${task.description}`;
+            return details;
+        }
+
+        const taskList = Object.entries(tasks).map(([id, task]) => {
+            return `- [${task.enabled ? 'ON' : 'OFF'}] ${task.name} (ID: ${id})`;
+        });
+
+        return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
+    },
+
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills, }) => {
+        const unlock = await acquireLock('config_tasks');
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+            const prompts = configData.config.prompts || {};
+
+            if (Object.values(tasks).some(t => t.name === name)) return `Error: A task with name "${name}" already exists.`;
+
+            let targetPromptKey = '__DEFAULT__';
+            if (agent_name && agent_name !== '__DEFAULT__') {
+                const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+                if (exactMatch) targetPromptKey = exactMatch;
+                else {
+                    const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                    if (fuzzyMatch) targetPromptKey = fuzzyMatch;
+                    else return `Error: Agent "${agent_name}" not found. Try using list_agents.`;
+                }
+            }
+
+            const taskId = `task_${Date.now()}`;
+            const newTask = {
+                name: name,
+                description: instruction || "",
+                promptKey: targetPromptKey,
+                triggerType: schedule_type,
+                enabled: enabled,
+                intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [], 
+                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
+                extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
+                lastRunTime: enabled ? Date.now() : 0,
+                singleDate: single_date || new Date().toISOString().split('T')[0],
+                singleTime: '12:00',
+            };
+
+            if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
+                newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
+            }
+            
+            // --- MCP / SKill 逻辑 ---
+            if (extra_mcp && Array.isArray(extra_mcp)) {
+                newTask.extraMcp = extra_mcp;
+            } else if (configData.config.mcpServers) {
+                // 如果没传，默认挂载所有内置服务
+                newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
+            }
+            
+            if (extra_skills && Array.isArray(extra_skills)) {
+                newTask.extraSkills = extra_skills;
+            }
+
+            if (schedule_type === 'daily' || schedule_type === 'weekly' || schedule_type === 'monthly' || schedule_type === 'single') {
+                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) {
+                    if (schedule_type === 'daily') newTask.dailyTime = time_param;
+                    if (schedule_type === 'weekly') newTask.weeklyTime = time_param;
+                    if (schedule_type === 'monthly') newTask.monthlyTime = time_param;
+                    if (schedule_type === 'single') newTask.singleTime = time_param;
+                } else return "Error: Invalid time format. Use HH:mm.";
+
+                if (schedule_type === 'weekly') {
+                    if (Array.isArray(weekly_days)) newTask.weeklyDays = weekly_days;
+                    else return "Error: weekly_days array is required for weekly schedule.";
+                }
+                if (schedule_type === 'monthly') {
+                    if (Array.isArray(monthly_days)) newTask.monthlyDays = monthly_days;
+                    else return "Error: monthly_days array is required for monthly schedule.";
+                }
+                if (schedule_type === 'single') {
+                    if (single_date) {
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(single_date)) {
+                            newTask.singleDate = single_date;
+                        } else {
+                            return "Error: single_date must be YYYY-MM-DD.";
+                        }
+                    } else {
+                        const nowD = new Date();
+                        newTask.singleDate = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
+                    }
+                }
+            } else if (schedule_type === 'interval') {
+                const minutes = parseInt(time_param);
+                if (!isNaN(minutes) && minutes > 0) newTask.intervalMinutes = minutes;
+                else return "Error: Invalid interval minutes.";
+            } else {
+                return "Error: Unknown schedule_type.";
+            }
+
+            tasks[taskId] = newTask;
+            configData.config.tasks = tasks;
+            await updateConfigWithoutFeatures({ config: configData.config });
+
+            return `Task "${name}" created successfully.`;
+        } finally {
+            unlock();
+        }
+    },
+
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
+        const unlock = await acquireLock('config_tasks');
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+            const prompts = configData.config.prompts || {};
+
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+            const task = tasks[targetId];
+
+            if (new_name && new_name !== task.name) {
+                if (Object.values(tasks).some(t => t.name === new_name)) return `Error: Task name "${new_name}" already exists.`;
+                task.name = new_name;
+            }
+
+            if (instruction !== undefined) task.description = instruction;
+
+            if (agent_name) {
+                if (agent_name === '__DEFAULT__') {
+                    task.promptKey = '__DEFAULT__';
+                } else {
+                    const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+                    if (exactMatch) task.promptKey = exactMatch;
+                    else {
+                        const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                        if (fuzzyMatch) task.promptKey = fuzzyMatch;
+                        else return `Error: Agent "${agent_name}" not found. Edit cancelled.`;
+                    }
+                }
+            }
+
+            // --- 修改 MCP 和 Skill 逻辑 ---
+            if (extra_mcp !== undefined) {
+                if (Array.isArray(extra_mcp)) task.extraMcp = extra_mcp;
+                else return "Error: extra_mcp must be an array of strings.";
+            }
+
+            if (extra_skills !== undefined) {
+                if (Array.isArray(extra_skills)) task.extraSkills = extra_skills;
+                else return "Error: extra_skills must be an array of strings.";
+            }
+
+            let timeChanged = false;
+            if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
+            const currentType = schedule_type || task.triggerType;
+
+            if (interval_time_ranges !== undefined) {
+                if (Array.isArray(interval_time_ranges)) {
+                    task.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
+                } else {
+                    task.intervalTimeRanges = [];
+                }
+            }
+
+            if (time_param) {
+                if (currentType === 'daily' || currentType === 'weekly' || currentType === 'monthly' || currentType === 'single') {
+                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { 
+                        if (currentType === 'daily') task.dailyTime = time_param; 
+                        if (currentType === 'weekly') task.weeklyTime = time_param; 
+                        if (currentType === 'monthly') task.monthlyTime = time_param;
+                        if (currentType === 'single') task.singleTime = time_param; 
+                        timeChanged = true; 
+                    }
+                    else return "Error: Invalid time format. Use HH:mm.";
+                } else if (currentType === 'interval') {
+                    const minutes = parseInt(time_param);
+                    if (!isNaN(minutes) && minutes > 0) { task.intervalMinutes = minutes; timeChanged = true; }
+                    else return "Error: Invalid interval minutes.";
+                }
+            }
+
+            if (weekly_days !== undefined) {
+                if (Array.isArray(weekly_days)) { task.weeklyDays = weekly_days; timeChanged = true; }
+                else return "Error: weekly_days must be an array.";
+            }
+
+            if (monthly_days !== undefined) {
+                if (Array.isArray(monthly_days)) { task.monthlyDays = monthly_days; timeChanged = true; }
+                else return "Error: monthly_days must be an array.";
+            }
+
+            if (single_date !== undefined) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(single_date)) { task.singleDate = single_date; timeChanged = true; }
+                else return "Error: single_date must be YYYY-MM-DD.";
+            }
+
+            if (timeChanged && task.enabled) {
+                task.lastRunTime = Date.now();
+            }
+
+            configData.config.tasks = tasks;
+            await updateConfigWithoutFeatures({ config: configData.config });
+
+            return `Task updated successfully.`;
+        } finally {
+            unlock();
+        }
+    },
+
+    control_task: async ({ task_name_or_id, enable }) => {
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                // Try finding by name
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+            tasks[targetId].enabled = enable;
+
+            // Reset last run time if enabling, so it doesn't trigger immediately if missed
+            if (enable) {
+                tasks[targetId].lastRunTime = Date.now();
+            }
+
+            await updateConfigWithoutFeatures({ config: configData.config });
+            return `Task "${tasks[targetId].name}" has been ${enable ? 'ENABLED' : 'DISABLED'}.`;
+        } finally {
+            unlock(); // 释放锁
+        }
+    },
+
+    delete_task: async ({ task_name_or_id }) => {
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+            const deletedName = tasks[targetId].name;
+            delete tasks[targetId];
+
+            await updateConfigWithoutFeatures({ config: configData.config });
+            return `Task "${deletedName}" deleted successfully.`;
+        } finally {
+            unlock(); // 释放锁
+        }
+    },
+
+    // Time Handler
+    get_current_time: async ({ timezone }) => {
+        try {
+            const options = {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            if (timezone) {
+                options.timeZone = timezone;
+            }
+            
+            const now = new Date();
+            const dateStr = new Intl.DateTimeFormat('zh-CN', options).format(now).replace(/\//g, '-');
+            const weekdayStr = new Intl.DateTimeFormat('en-US', { 
+                weekday: 'long', 
+                ...(timezone ? { timeZone: timezone } : {}) 
+            }).format(now);
+            
+            const tzDisplay = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Local System Time";
+
+            return `Current Time (${tzDisplay}):\nDate & Time: ${dateStr}\nDay of Week: ${weekdayStr}`;
+        } catch (e) {
+            return `Error getting time: ${e.message}. Please ensure the timezone string is valid (e.g., 'Asia/Shanghai').`;
+        }
+    },
 };
 
 // --- Exports ---
@@ -1732,8 +2526,56 @@ async function invokeBuiltinTool(toolName, args, signal = null, context = null) 
     throw new Error(`Built-in tool '${toolName}' not found.`);
 }
 
+function killAllBackgroundShells() {
+    if (backgroundShells.size === 0) return;
+    const { execSync } = require('child_process');
+    
+    backgroundShells.forEach((proc, shell_id) => {
+        if (proc.active && proc.pid) {
+            try {
+                if (isWin) {
+                    // 使用同步阻塞执行，确保在插件进程死亡前把子进程杀干净
+                    execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
+                } else {
+                    try { process.kill(-proc.pid, 'SIGKILL'); } 
+                    catch (e) { try { process.kill(proc.pid, 'SIGKILL'); } catch(e2){} }
+                }
+            } catch (e) {
+                // 忽略错误，强制执行
+            }
+            proc.active = false;
+        }
+    });
+    backgroundShells.clear();
+}
+
+// 绑定 Node.js 原生系统级死亡信号，确保即使被系统强杀也能带走子进程
+process.on('exit', killAllBackgroundShells);
+process.on('SIGINT', () => { killAllBackgroundShells(); process.exit(); });
+process.on('SIGTERM', () => { killAllBackgroundShells(); process.exit(); });
+
+// 供 preload.js 调用的统一入口
+function handleBgShellRequest(action, payload) {
+    const fnMap = {
+        'start': handlers.execute_bash_command,
+        'list': handlers.list_background_shells,
+        'read': handlers.read_background_shell_output,
+        'kill': handlers.kill_background_shell
+    };
+    
+    const fn = fnMap[action];
+    if (!fn) throw new Error("Unknown action: " + action);
+    
+    if (action === 'start') {
+        return fn({ command: payload.command, background: true }, null, null);
+    }
+    return fn(payload, null, null);
+}
+
 module.exports = {
     getBuiltinServers,
     getBuiltinTools,
-    invokeBuiltinTool
+    invokeBuiltinTool,
+    handleBgShellRequest,
+    killAllBackgroundShells
 };
