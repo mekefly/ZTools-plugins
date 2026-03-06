@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useI18n } from '@/i18n'
+import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
 type ViewMode = 'split' | 'slider' | 'blend'
 
-const originalImage = ref<string | null>(null)
-const modifiedImage = ref<string | null>(null)
+const sourceImage = ref<string | null>(null)
+const targetImage = ref<string | null>(null)
 
 const viewMode = ref<ViewMode>('split')
 
@@ -20,7 +20,7 @@ const viewportRef = ref<HTMLElement | null>(null)
 
 const blendOpacity = ref(0.5)
 
-const bothLoaded = computed(() => !!originalImage.value && !!modifiedImage.value)
+const bothLoaded = computed(() => !!sourceImage.value && !!targetImage.value)
 
 // ── File loading ─────────────────────────────────────
 const readFile = (file: File): Promise<string> =>
@@ -30,29 +30,29 @@ const readFile = (file: File): Promise<string> =>
         r.readAsDataURL(file)
     })
 
-const handleFileInput = async (e: Event, side: 'original' | 'modified') => {
+const handleFileInput = async (e: Event, side: 'source' | 'target') => {
     const input = e.target as HTMLInputElement
     if (!input.files?.[0]) return
     const url = await readFile(input.files[0])
-    if (side === 'original') originalImage.value = url
-    else modifiedImage.value = url
+    if (side === 'source') sourceImage.value = url
+    else targetImage.value = url
     input.value = ''
 }
 
-const handleDrop = async (e: DragEvent, side: 'original' | 'modified') => {
+const handleDrop = async (e: DragEvent, side: 'source' | 'target') => {
     e.preventDefault()
-    if (side === 'original') leftDragOver.value = false
+    if (side === 'source') leftDragOver.value = false
     else rightDragOver.value = false
     const file = e.dataTransfer?.files?.[0]
     if (!file || !file.type.startsWith('image/')) return
     const url = await readFile(file)
-    if (side === 'original') originalImage.value = url
-    else modifiedImage.value = url
+    if (side === 'source') sourceImage.value = url
+    else targetImage.value = url
 }
 
 const clearImages = () => {
-    originalImage.value = null
-    modifiedImage.value = null
+    sourceImage.value = null
+    targetImage.value = null
     sliderPos.value = 50
     blendOpacity.value = 0.5
     viewMode.value = 'split'
@@ -86,13 +86,13 @@ onUnmounted(() => {
         <!-- UNLOADED STATE: Two Dropzones side-by-side -->
         <div v-if="!bothLoaded" class="img-setup flex-1 flex">
 
-            <!-- Left Original -->
-            <div class="img-panel" :class="{ 'has-img': originalImage }">
-                <label v-if="!originalImage" class="img-dropzone bg-checker"
+            <!-- Left Source -->
+            <div class="img-panel" :class="{ 'has-img': sourceImage }">
+                <label v-if="!sourceImage" class="img-dropzone bg-checker"
                     :class="{ 'img-dropzone--active': leftDragOver }" @dragover.prevent="leftDragOver = true"
-                    @dragleave="leftDragOver = false" @drop="handleDrop($event, 'original')">
+                    @dragleave="leftDragOver = false" @drop="handleDrop($event, 'source')">
                     <input type="file" accept="image/*" class="img-file-input"
-                        @change="handleFileInput($event, 'original')" />
+                        @change="handleFileInput($event, 'source')" />
 
                     <div class="img-dropzone-card" :class="{ 'img-dropzone-card--active': leftDragOver }">
                         <div class="img-dz-icon-wrap">
@@ -104,26 +104,26 @@ onUnmounted(() => {
                                 <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                             </svg>
                         </div>
-                        <p class="img-dz-title">{{ t('imageBefore') }}</p>
+                        <p class="img-dz-title">{{ t('imageSource') }}</p>
                         <p class="img-dz-hint">{{ t('uploadImage') }}</p>
                     </div>
                 </label>
                 <div v-else
                     class="img-preview relative w-full h-full flex flex-col items-center justify-center p-6 bg-checker">
-                    <span class="view-pill absolute top-4 left-4">{{ t('imageBefore') }}</span>
-                    <img :src="originalImage" class="w-full flex-1 object-contain drop-shadow-md" />
+                    <span class="view-pill absolute top-4 left-4">{{ t('imageSource') }}</span>
+                    <img :src="sourceImage" class="w-full flex-1 object-contain drop-shadow-md" />
                 </div>
             </div>
 
             <div class="w-px bg-[var(--color-border)] flex-shrink-0"></div>
 
-            <!-- Right Modified -->
-            <div class="img-panel" :class="{ 'has-img': modifiedImage }">
-                <label v-if="!modifiedImage" class="img-dropzone bg-checker"
+            <!-- Right Target -->
+            <div class="img-panel" :class="{ 'has-img': targetImage }">
+                <label v-if="!targetImage" class="img-dropzone bg-checker"
                     :class="{ 'img-dropzone--active': rightDragOver }" @dragover.prevent="rightDragOver = true"
-                    @dragleave="rightDragOver = false" @drop="handleDrop($event, 'modified')">
+                    @dragleave="rightDragOver = false" @drop="handleDrop($event, 'target')">
                     <input type="file" accept="image/*" class="img-file-input"
-                        @change="handleFileInput($event, 'modified')" />
+                        @change="handleFileInput($event, 'target')" />
 
                     <div class="img-dropzone-card" :class="{ 'img-dropzone-card--active': rightDragOver }">
                         <div class="img-dz-icon-wrap">
@@ -135,14 +135,14 @@ onUnmounted(() => {
                                 <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                             </svg>
                         </div>
-                        <p class="img-dz-title">{{ t('imageAfter') }}</p>
+                        <p class="img-dz-title">{{ t('imageTarget') }}</p>
                         <p class="img-dz-hint">{{ t('uploadImage') }}</p>
                     </div>
                 </label>
                 <div v-else
                     class="img-preview relative w-full h-full flex flex-col items-center justify-center p-6 bg-checker">
-                    <span class="view-pill absolute top-4 right-4">{{ t('imageAfter') }}</span>
-                    <img :src="modifiedImage" class="w-full flex-1 object-contain drop-shadow-md" />
+                    <span class="view-pill absolute top-4 right-4">{{ t('imageTarget') }}</span>
+                    <img :src="targetImage" class="w-full flex-1 object-contain drop-shadow-md" />
                 </div>
             </div>
 
@@ -202,13 +202,13 @@ onUnmounted(() => {
                 <template v-if="viewMode === 'split'">
                     <div
                         class="w-1/2 h-full flex flex-col items-center p-5 border-r border-[var(--color-border)] relative">
-                        <span class="view-pill absolute top-4 left-4 z-10">{{ t('imageBefore') }}</span>
-                        <img :src="originalImage"
+                        <span class="view-pill absolute top-4 left-4 z-10">{{ t('imageSource') }}</span>
+                        <img :src="sourceImage"
                             class="w-full h-full object-contain pointer-events-none drop-shadow-lg" />
                     </div>
                     <div class="w-1/2 h-full flex flex-col items-center p-5 relative">
-                        <span class="view-pill absolute top-4 right-4 z-10">{{ t('imageAfter') }}</span>
-                        <img :src="modifiedImage"
+                        <span class="view-pill absolute top-4 right-4 z-10">{{ t('imageTarget') }}</span>
+                        <img :src="targetImage"
                             class="w-full h-full object-contain pointer-events-none drop-shadow-lg" />
                     </div>
                 </template>
@@ -216,15 +216,15 @@ onUnmounted(() => {
                 <!-- SLIDER MODE -->
                 <template v-else-if="viewMode === 'slider'">
                     <!-- Base Image (Modified) -->
-                    <img :src="modifiedImage"
+                    <img :src="targetImage"
                         class="absolute inset-0 p-5 w-full h-full object-contain pointer-events-none drop-shadow-lg" />
                     <!-- Overlay Image (Original) clipped -->
-                    <img :src="originalImage"
+                    <img :src="sourceImage"
                         class="absolute inset-0 p-5 w-full h-full object-contain pointer-events-none drop-shadow-lg"
                         :style="{ clipPath: `polygon(0 0, ${sliderPos}% 0, ${sliderPos}% 100%, 0 100%)` }" />
 
-                    <div class="absolute top-4 left-4 z-10"><span class="view-pill">{{ t('imageBefore') }}</span></div>
-                    <div class="absolute top-4 right-4 z-10"><span class="view-pill">{{ t('imageAfter') }}</span></div>
+                    <div class="absolute top-4 left-4 z-10"><span class="view-pill">{{ t('imageSource') }}</span></div>
+                    <div class="absolute top-4 right-4 z-10"><span class="view-pill">{{ t('imageTarget') }}</span></div>
 
                     <!-- Handle -->
                     <div class="absolute top-0 bottom-0 w-[2px] bg-[var(--color-cta)] cursor-ew-resize z-20 flex flex-col items-center justify-center transform -translate-x-1/2"
@@ -244,25 +244,25 @@ onUnmounted(() => {
                 <!-- BLEND MODE -->
                 <template v-else-if="viewMode === 'blend'">
                     <!-- Base -->
-                    <img :src="modifiedImage"
+                    <img :src="targetImage"
                         class="absolute inset-0 p-5 w-full h-full object-contain pointer-events-none drop-shadow-lg opacity-100" />
                     <!-- Crossfade Overlay -->
-                    <img :src="originalImage"
+                    <img :src="sourceImage"
                         class="absolute inset-0 p-5 w-full h-full object-contain pointer-events-none drop-shadow-lg"
                         :style="{ opacity: blendOpacity }" />
 
-                    <div class="absolute top-4 left-4 z-10"><span class="view-pill">{{ t('imageBefore') }}</span></div>
-                    <div class="absolute top-4 right-4 z-10"><span class="view-pill">{{ t('imageAfter') }}</span></div>
+                    <div class="absolute top-4 left-4 z-10"><span class="view-pill">{{ t('imageSource') }}</span></div>
+                    <div class="absolute top-4 right-4 z-10"><span class="view-pill">{{ t('imageTarget') }}</span></div>
 
                     <!-- Control Box -->
                     <div
                         class="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 bg-[var(--color-background)] px-6 py-3 rounded-full border border-[var(--color-border)] shadow-xl flex items-center gap-4 transition-transform hover:scale-105">
                         <span
-                            class="text-xs font-mono font-bold text-[var(--color-secondary)] uppercase tracking-widest w-14 text-right">After</span>
+                            class="text-xs font-mono font-bold text-[var(--color-secondary)] uppercase tracking-widest w-14 text-right">Target</span>
                         <input type="range" min="0" max="1" step="0.01" v-model.number="blendOpacity"
                             class="w-40 accent-[var(--color-cta)] cursor-pointer" />
                         <span
-                            class="text-xs font-mono font-bold text-[var(--color-secondary)] uppercase tracking-widest w-14 text-left">Before</span>
+                            class="text-xs font-mono font-bold text-[var(--color-secondary)] uppercase tracking-widest w-14 text-left">Source</span>
                     </div>
                 </template>
 

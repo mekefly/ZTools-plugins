@@ -9,12 +9,11 @@ export interface DiffChunk {
 export interface DiffResult {
   type: DiffType
   chunks: DiffChunk[]
-  // additional metadata to easily compute lines
-  originalLineCount?: number
-  modifiedLineCount?: number
+  sourceLineCount?: number
+  targetLineCount?: number
 }
 
 export interface IDiffStrategy<InputType = any> {
   type: DiffType
-  compute(original: InputType, modified: InputType): DiffResult
+  compute(source: InputType, target: InputType): DiffResult
 }

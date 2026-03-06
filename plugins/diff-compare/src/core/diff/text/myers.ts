@@ -3,17 +3,16 @@ import { DiffChunk, DiffResult, IDiffStrategy } from '../types'
 export class TextDiffStrategy implements IDiffStrategy<string> {
   type = 'text' as const
 
-  compute(original: string, modified: string): DiffResult {
-    // Treat empty string as empty array of lines for correct diffing
-    const originalLines = original === '' ? [] : original.split(/\r?\n/)
-    const modifiedLines = modified === '' ? [] : modified.split(/\r?\n/)
+  compute(source: string, target: string): DiffResult {
+    const sourceLines = source === '' ? [] : source.split(/\r?\n/)
+    const targetLines = target === '' ? [] : target.split(/\r?\n/)
 
-    const chunks = this.myersDiff(originalLines, modifiedLines)
+    const chunks = this.myersDiff(sourceLines, targetLines)
     return {
       type: 'text',
       chunks,
-      originalLineCount: originalLines.length,
-      modifiedLineCount: modifiedLines.length
+      sourceLineCount: sourceLines.length,
+      targetLineCount: targetLines.length
     }
   }
 

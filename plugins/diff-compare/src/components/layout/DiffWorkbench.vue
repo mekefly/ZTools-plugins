@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useI18n } from '@/i18n'
+import { useI18n } from 'vue-i18n'
 import SettingsPanel from '@/components/ui/SettingsPanel.vue'
 
 defineProps({

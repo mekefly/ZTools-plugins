@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from '../../i18n'
+import { useI18n } from 'vue-i18n'
 import Select from './Select.vue'
+import { useSettingsStore } from '@/store/settings'
+import { storeToRefs } from 'pinia'
 
-const { currentLang } = useI18n()
+const { locale, t } = useI18n()
+const settingsStore = useSettingsStore()
+const { autoFormat } = storeToRefs(settingsStore)
 
 const emit = defineEmits(['close'])
 
@@ -16,7 +20,7 @@ const usageItems = computed(() => {
     const zh = [
         {
             title: '文本对比',
-            desc: '将原始内容粘贴到左侧面板，修改后内容粘贴到右侧，系统自动实时高亮增删差异行。',
+            desc: '分别在两侧面板输入原始内容和修改后内容，系统自动实时高亮增删差异行。',
         },
         {
             title: '图片对比',
@@ -34,7 +38,7 @@ const usageItems = computed(() => {
     const en = [
         {
             title: 'Text Compare',
-            desc: 'Paste original content on the left, modified content on the right — differences are highlighted in real-time.',
+            desc: 'Paste source and target content on both sides — differences are highlighted in real-time.',
         },
         {
             title: 'Image Compare',
@@ -49,8 +53,18 @@ const usageItems = computed(() => {
             desc: 'Use the selector below to switch the display language between Chinese and English.',
         },
     ]
-    return currentLang.value === 'zh' ? zh : en
+    return locale.value === 'zh' ? zh : en
 })
+
+const autoFormatValue = computed({
+    get: () => autoFormat.value ? 'true' : 'false',
+    set: (v) => { autoFormat.value = v === 'true' }
+})
+
+const formatOptions = computed(() => [
+    { label: t('enabled'), value: 'true' },
+    { label: t('disabled'), value: 'false' }
+])
 </script>
 
 <template>
@@ -71,9 +85,9 @@ const usageItems = computed(() => {
                                 d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                             <circle cx="12" cy="12" r="3" />
                         </svg>
-                        <span>{{ currentLang === 'zh' ? '设置' : 'Settings' }}</span>
+                        <span>{{ locale === 'zh' ? '设置' : 'Settings' }}</span>
                     </div>
-                    <button class="sp-close" @click="emit('close')" :title="currentLang === 'zh' ? '关闭' : 'Close'">
+                    <button class="sp-close" @click="emit('close')" :title="locale === 'zh' ? '关闭' : 'Close'">
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -88,9 +102,17 @@ const usageItems = computed(() => {
                     <!-- Language section -->
                     <section class="sp-section">
                         <p class="sp-section-label">
-                            {{ currentLang === 'zh' ? '显示语言' : 'Display Language' }}
+                            {{ locale === 'zh' ? '显示语言' : 'Display Language' }}
                         </p>
-                        <Select v-model="currentLang" :options="langOptions" />
+                        <Select v-model="locale" :options="langOptions" />
+                    </section>
+
+                    <!-- Auto Format section -->
+                    <section class="sp-section">
+                        <p class="sp-section-label">
+                            {{ t('autoFormat') }}
+                        </p>
+                        <Select v-model="autoFormatValue" :options="formatOptions" />
                     </section>
 
                     <div class="sp-divider"></div>
@@ -98,7 +120,7 @@ const usageItems = computed(() => {
                     <!-- Usage guide section -->
                     <section class="sp-section">
                         <p class="sp-section-label">
-                            {{ currentLang === 'zh' ? '使用说明' : 'How to Use' }}
+                            {{ locale === 'zh' ? '使用说明' : 'How to Use' }}
                         </p>
                         <div class="sp-guide-list">
 
