@@ -1,42 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsPanel from '@/components/ui/SettingsPanel.vue'
 import ZTooltip from '@/components/ui/base/ZTooltip.vue'
 import ZButton from '@/components/ui/base/ZButton.vue'
+import { useTheme } from '@/composables/useTheme'
 
-const props = defineProps({
-    initialMode: {
-        type: String,
-        default: 'text'
-    }
-})
+const props = defineProps<{
+    initialMode?: string
+}>()
 
 const { locale, t } = useI18n()
-const activeMode = ref(props.initialMode)
+const activeMode = ref(props.initialMode || 'text')
 
-watch(() => props.initialMode, (newMode) => {
-    if (newMode) {
-        activeMode.value = newMode
-    }
+watchEffect(() => {
+    activeMode.value = props.initialMode || 'text'
 })
-const isDark = ref(true)
+
+const { isDark, toggleTheme } = useTheme()
 const showSettings = ref(false)
-
-const toggleTheme = () => {
-    isDark.value = !isDark.value
-    document.documentElement.classList.toggle('dark', isDark.value)
-}
-
-onMounted(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        isDark.value = true
-        document.documentElement.classList.add('dark')
-    } else {
-        isDark.value = false
-        document.documentElement.classList.remove('dark')
-    }
-})
 </script>
 
 <template>

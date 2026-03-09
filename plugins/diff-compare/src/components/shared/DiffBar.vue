@@ -6,7 +6,7 @@ const scrollContainerRef = ref<HTMLElement | null>(null)
 defineExpose({ scrollContainer: scrollContainerRef })
 
 export interface DiffBarItem {
-    type: 'equal' | 'delete' | 'insert' | 'modified' | 'added' | 'removed'
+    type: 'equal' | 'delete' | 'insert' | 'modify' | 'added' | 'removed'
     sourceText?: string
     targetText?: string
 }
@@ -40,7 +40,7 @@ defineEmits<{
                         'diff-icon--' + item.type,
                         activeIndex === idx ? 'diff-icon--active' : ''
                     ]" @click="$emit('itemClick', idx)">
-                        <svg v-if="item.type === 'modified'" xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                        <svg v-if="item.type === 'modify'" xmlns="http://www.w3.org/2000/svg" width="14" height="14"
                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                             stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 20h9" />
@@ -83,7 +83,7 @@ defineEmits<{
     transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.diff-icon--modified {
+.diff-icon--modify {
     color: #eab308;
     background-color: rgba(234, 179, 8, 0.1);
 }
@@ -105,7 +105,7 @@ defineEmits<{
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.diff-icon--active.diff-icon--modified {
+.diff-icon--active.diff-icon--modify {
     background-color: #eab308;
     color: white !important;
 }
@@ -122,7 +122,7 @@ defineEmits<{
     color: white !important;
 }
 
-.dark .diff-icon--active.diff-icon--modified,
+.dark .diff-icon--active.diff-icon--modify,
 .dark .diff-icon--active.diff-icon--insert,
 .dark .diff-icon--active.diff-icon--added,
 .dark .diff-icon--active.diff-icon--delete,

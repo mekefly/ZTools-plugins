@@ -1,77 +1,84 @@
-/**
- * @fileoverview 文本差异比较策略
- * @module core/diff/text/text
- * @description 提供基于行的文本差异比较功能，支持字符级高亮
- */
-
-import { diffArrays } from 'diff';
+import { diffArrays, diffWordsWithSpace, Change } from 'diff';
 import { DiffResult, IDiffStrategy } from '../types';
 
-/**
- * 文本差异比较策略
- * @class TextDiffStrategy
- * @implements IDiffStrategy<string>
- * @description 使用 diff 库的 diffArrays 实现高效的文本行级差异比较
- * @example
- * ```typescript
- * const strategy = new TextDiffStrategy();
- * const result = strategy.diff(
- *   ['line 1', 'line 2'],
- *   ['line 1', 'line 3']
- * );
- * ```
- */
+export interface TextDiffResult extends DiffResult<string> {
+  sourceLine?: number
+  targetLine?: number
+  inlineChanges?: Change[]
+}
+
 export class TextDiffStrategy implements IDiffStrategy<string> {
-  /** 策略类型标识 */
-  type = 'text' as const
+  type = 'text' as const;
 
-  /**
-   * 执行文本差异比较
-   * @param source - 源文本数组（按行分割）
-   * @param target - 目标文本数组（按行分割）
-   * @returns 差异比较结果数组
-   * @description 将 diff 库的数组比较结果转换为统一的 DiffResult 格式
-   */
-  diff(source: string[], target: string[]): DiffResult<string>[] {
-    const changes = diffArrays(source, target)
-    const result: DiffResult<string>[] = []
+  diff(source: string[], target: string[]): TextDiffResult[] {
+    const changes = diffArrays(source, target);
+    const result: TextDiffResult[] = [];
 
-    let i = 0
-    let j = 0
+    let sourceIndex = 1;
+    let targetIndex = 1;
 
-    for (const part of changes) {
+    for (let k = 0; k < changes.length; k++) {
+      const part = changes[k];
+
+      if (part.removed && changes[k + 1] && changes[k + 1].added) {
+        const removedPart = part;
+        const addedPart = changes[k + 1];
+
+        const maxLength = Math.max(removedPart.value.length, addedPart.value.length);
+
+        for (let idx = 0; idx < maxLength; idx++) {
+          const sLine = removedPart.value[idx];
+          const tLine = addedPart.value[idx];
+
+          if (sLine !== undefined && tLine !== undefined) {
+            const inlineChanges = diffWordsWithSpace(sLine, tLine);
+            result.push({
+              type: 'modify',
+              source: sLine,
+              target: tLine,
+              sourceLine: sourceIndex++,
+              targetLine: targetIndex++,
+              inlineChanges
+            });
+          } else if (sLine !== undefined) {
+            result.push({ type: 'delete', source: sLine, sourceLine: sourceIndex++ });
+          } else if (tLine !== undefined) {
+            result.push({ type: 'insert', target: tLine, targetLine: targetIndex++ });
+          }
+        }
+        k++;
+        continue;
+      }
+
       if (!part.added && !part.removed) {
-        // 相等部分
         for (const value of part.value) {
           result.push({
             type: 'equal',
             source: value,
-            target: value
-          })
-          i++
-          j++
+            target: value,
+            sourceLine: sourceIndex++,
+            targetLine: targetIndex++
+          });
         }
       } else if (part.removed) {
-        // 删除部分
         for (const value of part.value) {
           result.push({
             type: 'delete',
-            source: value
-          })
-          i++
+            source: value,
+            sourceLine: sourceIndex++
+          });
         }
       } else if (part.added) {
-        // 插入部分
         for (const value of part.value) {
           result.push({
             type: 'insert',
-            target: value
-          })
-          j++
+            target: value,
+            targetLine: targetIndex++
+          });
         }
       }
     }
 
-    return result
+    return result;
   }
 }

@@ -1,30 +1,76 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
-import { TextDiffStrategy } from "@/core/diff/text/text.ts";
-import { DiffResult } from "@/core/diff/types";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import ZSelect from "@/components/ui/base/ZSelect.vue";
 import ZTooltip from "@/components/ui/base/ZTooltip.vue";
 import ZButton from "@/components/ui/base/ZButton.vue";
 import ZBadge from "@/components/ui/base/ZBadge.vue";
-import { formatCode, detectLanguage } from "@/utils/formatter";
-import { useSettingsStore } from "@/store/settings";
-import { storeToRefs } from "pinia";
+import { detectLanguage } from "@/utils/formatter";
+import { useTextDiff } from "@/composables/useTextDiff";
+import { useAutoFormat } from "@/composables/useAutoFormat";
+import { useSyntaxHighlight } from "@/composables/useSyntaxHighlight";
+import 'highlight.js/styles/dark.min.css'
 
 const { t } = useI18n();
-const settingsStore = useSettingsStore();
-const { autoFormat } = storeToRefs(settingsStore);
-
-const sourceText = ref("");
-const targetText = ref("");
-const selectedLang = ref("auto");
 const textViewMode = ref<"split" | "unified">("split");
+const selectedLang = ref("auto");
 
-const swapTexts = () => {
-  const temp = sourceText.value;
-  sourceText.value = targetText.value;
-  targetText.value = temp;
-};
+const {
+  sourceText,
+  targetText,
+  diffLines,
+  isDiffing,
+  leftLines,
+  rightLines,
+  addedCount,
+  removedCount,
+  changeIndices,
+  unifiedDiffLines,
+  swapTexts,
+  currentChangeIdx,
+  goToPrevChange,
+  goToNextChange,
+  resetNavigation,
+  registerScrollCallback,
+  totalChanges,
+} = useTextDiff()
+
+const { scheduleAutoFormat, immediateFormat } = useAutoFormat()
+
+const {
+  highlightedSource,
+  highlightedTarget,
+  highlightSource,
+  highlightTarget,
+  isSourceHighlighted,
+  isTargetHighlighted,
+} = useSyntaxHighlight()
+
+const leftTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const rightTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const sourceHighlightRef = ref<HTMLElement | null>(null)
+const targetHighlightRef = ref<HTMLElement | null>(null)
+
+const setSourceHighlightRef = (el: HTMLElement | null) => {
+  sourceHighlightRef.value = el
+}
+
+const setTargetHighlightRef = (el: HTMLElement | null) => {
+  targetHighlightRef.value = el
+}
+
+onMounted(() => {
+  const unregisterLeft = registerScrollCallback((scrollTop) => {
+    leftTextareaRef.value?.scrollTo(0, scrollTop)
+  })
+  const unregisterRight = registerScrollCallback((scrollTop) => {
+    rightTextareaRef.value?.scrollTo(0, scrollTop)
+  })
+  onUnmounted(() => {
+    unregisterLeft()
+    unregisterRight()
+  })
+})
 
 const langOptions = computed(() => [
   { label: t("autoDetect"), value: "auto" },
@@ -55,6 +101,14 @@ const targetLang = computed(() => {
   return detectLanguage(targetText.value);
 });
 
+watch([sourceText, sourceLang], ([text, lang]) => {
+  highlightSource(text || '', lang)
+})
+
+watch([targetText, targetLang], ([text, lang]) => {
+  highlightTarget(text || '', lang)
+})
+
 const getLangLabel = (langValue: string) => {
   const opt = langOptions.value.find(
     (o) => o.value === langValue.toLowerCase(),
@@ -65,245 +119,63 @@ const getLangLabel = (langValue: string) => {
 const sourceLangLabel = computed(() => getLangLabel(sourceLang.value));
 const targetLangLabel = computed(() => getLangLabel(targetLang.value));
 
-const diffStrategy = new TextDiffStrategy();
-const diffResult = ref<DiffResult<string>[]>([]);
-const diffChunks = computed(() => diffResult.value);
-const isDiffing = ref(false);
+watch(sourceText, () => {
+  scheduleAutoFormat(sourceText, selectedLang.value, "source")
+})
 
-let diffWorker: Worker | null = null;
-let currentRequestId = 0;
-let debounceTimer: any = null;
-
-watch(
-  [sourceText, targetText],
-  ([source, target]) => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-
-    debounceTimer = setTimeout(() => {
-      if (!diffWorker) {
-        diffWorker = new Worker(
-          new URL("../../core/diff/diff.worker.ts", import.meta.url),
-          { type: "module" },
-        );
-        diffWorker.onmessage = (e) => {
-          const { requestId, result, error } = e.data;
-          if (requestId === currentRequestId) {
-            if (!error) {
-              diffResult.value = result;
-            }
-            isDiffing.value = false;
-          }
-        };
-      }
-
-      isDiffing.value = true;
-      const requestId = ++currentRequestId;
-      const sourceLines = source === '' ? [] : source.split('\n');
-      const targetLines = target === '' ? [] : target.split('\n');
-      diffWorker.postMessage({
-        type: "text",
-        source: sourceLines,
-        target: targetLines,
-        requestId,
-      });
-    }, 300); // 300ms debounce
-  },
-  { immediate: true },
-);
-
-onUnmounted(() => {
-  if (diffWorker) {
-    diffWorker.terminate();
-    diffWorker = null;
-  }
-});
-
-// Compute line arrays mapped strictly to text inputs splitting by \n
-const sourceLineArr = computed(() =>
-  sourceText.value === "" ? [] : sourceText.value.split("\n"),
-);
-const targetLineArr = computed(() =>
-  targetText.value === "" ? [] : targetText.value.split("\n"),
-);
-
-// Left lines highlight state
-const leftLinesState = computed(() => {
-  const states: { type: string }[] = [];
-  for (const chunk of diffChunks.value) {
-    if (chunk.type === "equal") states.push({ type: "equal" });
-    else if (chunk.type === "delete") states.push({ type: "delete" });
-    else if (chunk.type === "modify") states.push({ type: "delete" });
-  }
-  return states;
-});
-
-// Right lines highlight state
-const rightLinesState = computed(() => {
-  const states: { type: string }[] = [];
-  for (const chunk of diffChunks.value) {
-    if (chunk.type === "equal") states.push({ type: "equal" });
-    else if (chunk.type === "insert") states.push({ type: "insert" });
-    else if (chunk.type === "modify") states.push({ type: "insert" });
-  }
-  return states;
-});
-
-const addedCount = computed(
-  () => diffChunks.value.filter((c) => c.type === "insert" || c.type === "modify").length,
-);
-const removedCount = computed(
-  () => diffChunks.value.filter((c) => c.type === "delete" || c.type === "modify").length,
-);
-
-// Unified view lines
-const unifiedDiffLines = computed(() => {
-  const lines: {
-    type: string;
-    value: string;
-    leftNo?: number;
-    rightNo?: number;
-  }[] = [];
-  let leftCount = 1;
-  let rightCount = 1;
-
-  for (const chunk of diffChunks.value) {
-    if (chunk.type === "equal") {
-      lines.push({
-        type: "equal",
-        value: chunk.source || "",
-        leftNo: leftCount++,
-        rightNo: rightCount++,
-      });
-    } else if (chunk.type === "delete") {
-      lines.push({ type: "delete", value: chunk.source || "", leftNo: leftCount++ });
-    } else if (chunk.type === "insert") {
-      lines.push({ type: "insert", value: chunk.target || "", rightNo: rightCount++ });
-    } else if (chunk.type === "modify") {
-      lines.push({
-        type: "delete",
-        value: chunk.source || "",
-        leftNo: leftCount++,
-      });
-      lines.push({
-        type: "insert",
-        value: chunk.target || "",
-        rightNo: rightCount++,
-      });
-    }
-  }
-  return lines;
-});
-
-// Sync scrolling
-const leftBack = ref<HTMLElement | null>(null);
-const rightBack = ref<HTMLElement | null>(null);
-const leftLineNumbers = ref<HTMLElement | null>(null);
-const rightLineNumbers = ref<HTMLElement | null>(null);
+watch(targetText, () => {
+  scheduleAutoFormat(targetText, selectedLang.value, "target")
+})
 
 const onLeftScroll = (e: Event) => {
   const target = e.target as HTMLTextAreaElement;
-  if (leftBack.value) {
-    leftBack.value.scrollTop = target.scrollTop;
-    leftBack.value.scrollLeft = target.scrollLeft;
+  if (sourceHighlightRef.value) {
+    sourceHighlightRef.value.scrollTop = target.scrollTop
+    sourceHighlightRef.value.scrollLeft = target.scrollLeft
   }
-  if (leftLineNumbers.value) {
-    leftLineNumbers.value.scrollTop = target.scrollTop;
+  const container = target.closest('.diff-scroll-container');
+  if (container) {
+    container.scrollTop = target.scrollTop;
   }
-};
+}
 
 const onRightScroll = (e: Event) => {
   const target = e.target as HTMLTextAreaElement;
-  if (rightBack.value) {
-    rightBack.value.scrollTop = target.scrollTop;
-    rightBack.value.scrollLeft = target.scrollLeft;
+  if (targetHighlightRef.value) {
+    targetHighlightRef.value.scrollTop = target.scrollTop
+    targetHighlightRef.value.scrollLeft = target.scrollLeft
   }
-  if (rightLineNumbers.value) {
-    rightLineNumbers.value.scrollTop = target.scrollTop;
+  const container = target.closest('.diff-scroll-container');
+  if (container) {
+    container.scrollTop = target.scrollTop;
   }
-};
+}
 
-// Navigation
-const changeIndices = computed(() => {
-  const indices: number[] = [];
-  diffChunks.value.forEach((chunk, i) => {
-    if (chunk.type !== "equal") indices.push(i);
-  });
-  return indices;
-});
-
-const currentChangeIdx = ref(-1);
-
-const leftTextarea = ref<HTMLTextAreaElement | null>(null);
-const rightTextarea = ref<HTMLTextAreaElement | null>(null);
-
-const goToChange = (dir: "next" | "prev") => {
-  if (changeIndices.value.length === 0) return;
-
-  if (dir === "next") {
-    currentChangeIdx.value =
-      (currentChangeIdx.value + 1) % changeIndices.value.length;
-  } else {
-    currentChangeIdx.value =
-      (currentChangeIdx.value - 1 + changeIndices.value.length) %
-      changeIndices.value.length;
+const onLeftKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    const target = e.target as HTMLTextAreaElement
+    const start = target.selectionStart
+    const end = target.selectionEnd
+    sourceText.value = sourceText.value.substring(0, start) + '  ' + sourceText.value.substring(end)
+    requestAnimationFrame(() => {
+      target.selectionStart = target.selectionEnd = start + 2
+    })
   }
+}
 
-  const chunkIdx = changeIndices.value[currentChangeIdx.value];
-
-  // Find the line number for this chunk start
-  let leftLine = 0;
-  let rightLine = 0;
-  for (let i = 0; i < chunkIdx; i++) {
-    const c = diffChunks.value[i];
-    if (c.type === "equal" || c.type === "delete" || c.type === "modify") {
-      leftLine += 1;
-    }
-    if (c.type === "equal" || c.type === "insert" || c.type === "modify") {
-      rightLine += 1;
-    }
+const onRightKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    const target = e.target as HTMLTextAreaElement
+    const start = target.selectionStart
+    const end = target.selectionEnd
+    targetText.value = targetText.value.substring(0, start) + '  ' + targetText.value.substring(end)
+    requestAnimationFrame(() => {
+      target.selectionStart = target.selectionEnd = start + 2
+    })
   }
-
-  const lineHeight = 24; // approximate
-  if (leftTextarea.value)
-    leftTextarea.value.scrollTop = leftLine * lineHeight - 100;
-  if (rightTextarea.value)
-    rightTextarea.value.scrollTop = rightLine * lineHeight - 100;
-};
-
-// Debounce timers
-let sourceTimer: any = null;
-let targetTimer: any = null;
-
-const performAutoFormat = (side: "source" | "target") => {
-  if (!autoFormat.value) return;
-
-  if (side === "source") {
-    const formatted = formatCode(sourceText.value, selectedLang.value);
-    if (formatted !== sourceText.value) sourceText.value = formatted;
-  } else {
-    const formatted = formatCode(targetText.value, selectedLang.value);
-    if (formatted !== targetText.value) targetText.value = formatted;
-  }
-};
-
-// Watchers for debounced auto-format
-watch(sourceText, () => {
-  clearTimeout(sourceTimer);
-  if (!autoFormat.value) return;
-  sourceTimer = setTimeout(() => performAutoFormat("source"), 1000);
-});
-
-watch(targetText, () => {
-  clearTimeout(targetTimer);
-  if (!autoFormat.value) return;
-  targetTimer = setTimeout(() => performAutoFormat("target"), 1000);
-});
-
-const handlePaste = (side: "source" | "target") => {
-  if (!autoFormat.value) return;
-  // Immediate format on paste
-  setTimeout(() => performAutoFormat(side), 10);
-};
+}
 </script>
 
 <template>
@@ -324,45 +196,13 @@ const handlePaste = (side: "source" | "target") => {
             class="!rounded-md">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-              <line x1="12" y1="3" x2="12" y2="21" />
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M12 3v18" />
             </svg>
-            {{ t("viewSplit") }}
           </ZButton>
           <ZButton :variant="textViewMode === 'unified' ? 'primary' : 'surface'" size="sm"
             @click="textViewMode = 'unified'" class="!rounded-md">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-            </svg>
-            {{ t("viewUnified") }}
-          </ZButton>
-        </div>
-
-        <div class="h-4 w-px bg-[var(--color-border)] mx-1"></div>
-
-        <div class="flex gap-1">
-          <ZTooltip :content="t('prevChange')">
-            <ZButton variant="ghost" size="icon-sm" @click="goToChange('prev')">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m18 15-6-6-6 6" />
-              </svg>
-            </ZButton>
-          </ZTooltip>
-          <ZTooltip :content="t('nextChange')">
-            <ZButton variant="ghost" size="icon-sm" @click="goToChange('next')">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </ZButton>
-          </ZTooltip>
-        </div>
-
-        <ZTooltip :content="t('swapText')">
-          <ZButton variant="ghost" size="icon-sm" @click="swapTexts">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="m16 3 4 4-4 4" />
               <path d="M20 7H9a4 4 0 1 0 0 8h1" />
@@ -370,7 +210,7 @@ const handlePaste = (side: "source" | "target") => {
               <path d="M4 17h11a4 4 0 1 0 0-8h-1" />
             </svg>
           </ZButton>
-        </ZTooltip>
+        </div>
       </div>
 
       <div class="flex gap-4 items-center">
@@ -383,10 +223,34 @@ const handlePaste = (side: "source" | "target") => {
           <ZBadge variant="success" size="lg">+{{ addedCount }}</ZBadge>
           <ZBadge variant="danger" size="lg">-{{ removedCount }}</ZBadge>
         </div>
+        <div class="h-4 w-px bg-[var(--color-border)] mx-1"></div>
+        <div class="flex items-center gap-1">
+          <ZTooltip :content="t('prevChange') || 'Previous Change'" position="bottom">
+            <ZButton variant="surface" size="sm" @click="goToPrevChange" :disabled="totalChanges === 0"
+              class="!w-8 !h-8 !p-0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </ZButton>
+          </ZTooltip>
+          <ZTooltip :content="t('nextChange') || 'Next Change'" position="bottom">
+            <ZButton variant="surface" size="sm" @click="goToNextChange" :disabled="totalChanges === 0"
+              class="!w-8 !h-8 !p-0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </ZButton>
+          </ZTooltip>
+          <span v-if="totalChanges > 0" class="text-xs text-[var(--color-secondary)] ml-1 font-mono min-w-[40px]">
+            {{ currentChangeIdx >= 0 ? currentChangeIdx + 1 : 0 }}/{{ totalChanges }}
+          </span>
+        </div>
       </div>
     </div>
 
-    <div class="flex-1 min-h-[400px] overflow-hidden">
+    <div class="flex-1 min-h-[400px] overflow-hidden diff-scroll-container">
       <!-- SPLIT MODE -->
       <div v-if="textViewMode === 'split'" class="grid grid-cols-2 gap-4 h-full">
         <!-- Source Panel -->
@@ -413,37 +277,28 @@ const handlePaste = (side: "source" | "target") => {
               {{ sourceLangLabel }}
             </ZBadge>
           </div>
-          <div class="relative flex-1 overflow-hidden group w-full h-full flex mt-0">
+          <div class="relative flex-1 group w-full h-full overflow-hidden">
             <!-- Line Numbers -->
             <div
-              class="w-10 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col font-mono text-[10px] text-[var(--color-secondary)] opacity-40 select-none pt-4 pb-16 leading-6 text-right px-2"
-              ref="leftLineNumbers">
-              <div v-for="(_, i) in sourceLineArr" :key="'ln-l-' + i">
-                {{ i + 1 }}
+              class="absolute left-0 top-0 bottom-0 w-10 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col font-mono text-[10px] text-[var(--color-secondary)] opacity-40 select-none text-right px-2 py-2 overflow-hidden">
+              <div v-for="line in leftLines" :key="'ln-l-' + line.lineNum" class="h-6 leading-6">
+                {{ line.lineNum }}
               </div>
             </div>
-
-            <!-- Diff Highlights Backdrop -->
-            <div ref="leftBack" class="absolute inset-x-10 inset-y-0 overflow-hidden pointer-events-none z-0">
-              <div class="p-4 py-4 pb-16 font-mono text-sm leading-6 whitespace-pre inline-block min-w-full">
-                <div v-for="(line, i) in sourceLineArr" :key="'l-' + i" :class="[
-                  leftLinesState[i]?.type === 'delete'
-                    ? 'bg-[var(--color-delete-bg)] text-[var(--color-delete-text)]'
-                    : '',
-                  'w-full',
-                ]" style="min-height: 1.5rem">
-                  <span class="text-transparent selection:bg-transparent">{{
-                    line === "" ? " " : line
-                  }}</span>
-                </div>
-                <div v-if="sourceLineArr.length === 0" style="min-height: 1.5rem"></div>
-              </div>
+            <!-- Diff Highlights + Textarea -->
+            <div class="absolute left-10 right-0 top-0 bottom-0">
+              <!-- Highlight layer -->
+              <pre 
+                v-if="isSourceHighlighted"
+                :ref="setSourceHighlightRef"
+                class="highlight-layer absolute inset-0 m-0 p-2 font-mono text-sm leading-6 whitespace-pre-wrap break-all pointer-events-none overflow-auto scrollbar-hide"
+                v-html="highlightedSource"
+              ></pre>
+              <!-- Textarea -->
+              <textarea ref="leftTextareaRef" v-model="sourceText" @scroll="onLeftScroll" @keydown="onLeftKeydown"
+                class="diff-textarea absolute inset-0 m-0 w-full h-full p-2 font-mono text-sm leading-6 resize-none outline-none whitespace-pre-wrap break-all border-none overflow-auto scrollbar-hide"
+                wrap="soft" spellcheck="false" :placeholder="t('pasteSource')"></textarea>
             </div>
-            <!-- Editable Textarea -->
-            <textarea ref="leftTextarea" v-model="sourceText" @scroll="onLeftScroll" @paste="handlePaste('source')"
-              class="relative block w-full h-full bg-transparent text-[var(--color-text)] caret-[var(--color-text)] p-4 py-4 pb-16 font-mono text-sm leading-6 resize-none outline-none z-10 whitespace-pre"
-              wrap="off" spellcheck="false" :placeholder="t('pasteSource')">
-  </textarea>
           </div>
         </div>
 
@@ -471,37 +326,28 @@ const handlePaste = (side: "source" | "target") => {
               {{ targetLangLabel }}
             </ZBadge>
           </div>
-          <div class="relative flex-1 overflow-hidden group w-full h-full flex mt-0">
+          <div class="relative flex-1 group w-full h-full overflow-hidden">
             <!-- Line Numbers -->
             <div
-              class="w-10 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col font-mono text-[10px] text-[var(--color-secondary)] opacity-40 select-none pt-4 pb-16 leading-6 text-right px-2"
-              ref="rightLineNumbers">
-              <div v-for="(_, i) in targetLineArr" :key="'ln-r-' + i">
-                {{ i + 1 }}
+              class="absolute left-0 top-0 bottom-0 w-10 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex-shrink-0 flex flex-col font-mono text-[10px] text-[var(--color-secondary)] opacity-40 select-none text-right px-2 py-2 overflow-hidden">
+              <div v-for="line in rightLines" :key="'ln-r-' + line.lineNum" class="h-6 leading-6">
+                {{ line.lineNum }}
               </div>
             </div>
-
-            <!-- Diff Highlights Backdrop -->
-            <div ref="rightBack" class="absolute inset-x-10 inset-y-0 overflow-hidden pointer-events-none z-0">
-              <div class="p-4 py-4 pb-16 font-mono text-sm leading-6 whitespace-pre inline-block min-w-full">
-                <div v-for="(line, i) in targetLineArr" :key="'r-' + i" :class="[
-                  rightLinesState[i]?.type === 'insert'
-                    ? 'bg-[var(--color-insert-bg)] text-[var(--color-insert-text)]'
-                    : '',
-                  'w-full',
-                ]" style="min-height: 1.5rem">
-                  <span class="text-transparent selection:bg-transparent">{{
-                    line === "" ? " " : line
-                  }}</span>
-                </div>
-                <div v-if="targetLineArr.length === 0" style="min-height: 1.5rem"></div>
-              </div>
+            <!-- Diff Highlights + Textarea -->
+            <div class="absolute left-10 right-0 top-0 bottom-0">
+              <!-- Highlight layer -->
+              <pre 
+                v-if="isTargetHighlighted"
+                :ref="setTargetHighlightRef"
+                class="highlight-layer absolute inset-0 m-0 p-2 font-mono text-sm leading-6 whitespace-pre-wrap break-all pointer-events-none overflow-auto scrollbar-hide"
+                v-html="highlightedTarget"
+              ></pre>
+              <!-- Textarea -->
+              <textarea ref="rightTextareaRef" v-model="targetText" @scroll="onRightScroll" @keydown="onRightKeydown"
+                class="diff-textarea absolute inset-0 m-0 w-full h-full p-2 font-mono text-sm leading-6 resize-none outline-none whitespace-pre-wrap break-all border-none overflow-auto scrollbar-hide"
+                wrap="soft" spellcheck="false" :placeholder="t('pasteTarget')"></textarea>
             </div>
-            <!-- Editable Textarea -->
-            <textarea ref="rightTextarea" v-model="targetText" @scroll="onRightScroll" @paste="handlePaste('target')"
-              class="relative block w-full h-full bg-transparent text-[var(--color-text)] caret-[var(--color-text)] p-4 py-4 pb-16 font-mono text-sm leading-6 resize-none outline-none z-10 whitespace-pre"
-              wrap="off" spellcheck="false" :placeholder="t('pasteTarget')">
-    </textarea>
           </div>
         </div>
       </div>
@@ -513,7 +359,7 @@ const handlePaste = (side: "source" | "target") => {
           class="bg-[var(--color-background)] px-4 py-2 border-b border-[var(--color-border)] h-10 flex items-center">
           <ZBadge variant="surface" size="lg">{{ t("viewUnified") }}</ZBadge>
         </div>
-        <div class="flex-1 overflow-auto bg-[var(--color-background)] custom-scrollbar">
+        <div class="scrollbar-hide flex-1 overflow-auto bg-[var(--color-background)] custom-scrollbar">
           <div class="min-w-fit w-full font-mono text-sm leading-6 flex flex-col">
             <div v-for="(line, i) in unifiedDiffLines" :key="'u-' + i"
               class="flex group hover:bg-[var(--color-surface)] transition-colors">
@@ -555,52 +401,100 @@ const handlePaste = (side: "source" | "target") => {
 </template>
 
 <style scoped lang="scss">
-/* Ensure the textarea doesn't hide the background highlights underneath */
-textarea {
-  color: inherit;
-  /* will use var(--color-text) */
-  background: transparent;
+.diff-textarea {
+  color: transparent !important;
+  background: transparent !important;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--color-text);
+}
 
-  /* Scroller styling for textarea without transparent track */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
   &::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: rgba(128, 128, 128, 0.1);
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: var(--color-border);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-
-  &:focus::-webkit-scrollbar-thumb {
-    background-color: var(--color-cta);
+    display: none;
   }
 }
 
-.custom-scrollbar {
-  &::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  &::-webkit-scrollbar-track {
+.highlight-layer {
+  :deep(.hljs) {
     background: transparent;
+    padding: 0;
+    margin: 0;
+    color: var(--color-text);
   }
 
-  &::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 10px;
+  :deep(.hljs-keyword),
+  :deep(.hljs-selector-tag),
+  :deep(.hljs-title),
+  :deep(.hljs-section),
+  :deep(.hljs-doctag),
+  :deep(.hljs-name),
+  :deep(.hljs-strong),
+  :deep(.hljs-built_in),
+  :deep(.hljs-operator) {
+    color: #c678dd;
+  }
 
-    &:hover {
-      background: var(--color-secondary);
-    }
+  :deep(.hljs-string),
+  :deep(.hljs-title.class_),
+  :deep(.hljs-title.class_.inherited__),
+  :deep(.hljs-title.function_),
+  :deep(.hljs-addition) {
+    color: #98c379;
+  }
+
+  :deep(.hljs-comment),
+  :deep(.hljs-quote) {
+    color: #5c6370;
+    font-style: italic;
+  }
+
+  :deep(.hljs-number),
+  :deep(.hljs-literal),
+  :deep(.hljs-variable),
+  :deep(.hljs-template-variable),
+  :deep(.hljs-tag .hljs-attr),
+  :deep(.hljs-attr) {
+    color: #d19a66;
+  }
+
+  :deep(.hljs-type),
+  :deep(.hljs-class .hljs-title) {
+    color: #61afef;
+  }
+
+  :deep(.hljs-deletion) {
+    color: #e06c75;
+    background-color: rgba(224, 108, 117, 0.15);
+  }
+
+  :deep(.hljs-function),
+  :deep(.hljs-title.function_) {
+    color: #61afef;
+  }
+
+  :deep(.hljs-params) {
+    color: #e06c75;
+  }
+
+  :deep(.hljs-meta) {
+    color: #e5c07b;
+  }
+
+  :deep(.hljs-attribute) {
+    color: #98c379;
+  }
+
+  :deep(.hljs-symbol),
+  :deep(.hljs-bullet) {
+    color: #e5c07b;
+  }
+
+  :deep(.hljs-link) {
+    color: #61afef;
+    text-decoration: underline;
   }
 }
 </style>

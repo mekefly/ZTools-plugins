@@ -1,204 +1,44 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import * as XLSX from 'xlsx'
 import ZBadge from '@/components/ui/base/ZBadge.vue'
 import ZButton from '@/components/ui/base/ZButton.vue'
 import ZTooltip from '@/components/ui/base/ZTooltip.vue'
 import ZSelect from '@/components/ui/base/ZSelect.vue'
 import FileDropzone from '@/components/shared/FileDropzone.vue'
 import DiffLegend from '@/components/shared/DiffLegend.vue'
-import { readFileAsArrayBuffer } from '@/utils/file'
-import { extractFilesFromClipboard } from '@/utils/clipboard'
+import { useExcelDiff } from '@/composables/useExcelDiff'
+import { useScrollSync } from '@/composables/useScrollSync'
 
 const { t } = useI18n()
 
 type ViewMode = 'split' | 'unified'
 const viewMode = ref<ViewMode>('split')
 
-interface CellDiff {
-    row: number
-    col: number
-    address: string
-    source: any
-    target: any
-}
+const {
+    sourceWorkbook,
+    targetWorkbook,
+    selectedSheetName,
+    diffResult,
+    loading,
+    activeCell,
+    showDiffPanel,
+    bothLoaded,
+    sheetOptions,
+    currentSheetDiff,
+    handleFile,
+    clearItems,
+    getCellClass,
+    getColumnName,
+    getSheetDiffCount,
+    getRowDiff,
+} = useExcelDiff()
 
-interface SheetDiff {
-    name: string
-    diffs: CellDiff[]
-    sourceData: any[][]
-    targetData: any[][]
-    rowCount: number
-    colCount: number
-}
-
-const sourceWorkbook = ref<XLSX.WorkBook | null>(null)
-const targetWorkbook = ref<XLSX.WorkBook | null>(null)
-const selectedSheetName = ref('')
-const diffResult = ref<SheetDiff[]>([])
-const loading = ref(false)
-
-let diffWorker: Worker | null = null
-let currentRequestId = 0
-
-const bothLoaded = computed(() => !!sourceWorkbook.value && !!targetWorkbook.value)
-
-const sheetOptions = computed(() => {
-    return diffResult.value.map(s => ({ label: s.name, value: s.name }))
-})
-
-const currentSheetDiff = computed(() => {
-    return diffResult.value.find(s => s.name === selectedSheetName.value) || null
-})
-
-const readWorkbook = async (file: File): Promise<XLSX.WorkBook> => {
-    const buffer = await readFileAsArrayBuffer(file)
-    const data = new Uint8Array(buffer)
-    return XLSX.read(data, { type: 'array' })
-}
-
-const handleFile = async (e: Event, side: 'source' | 'target') => {
-    const input = e.target as HTMLInputElement
-    const files = input.files
-    if (!files || files.length === 0) return
-
-    loading.value = true
-    try {
-        if (files.length >= 2) {
-            sourceWorkbook.value = await readWorkbook(files[0])
-            targetWorkbook.value = await readWorkbook(files[1])
-        } else {
-            const wb = await readWorkbook(files[0])
-            if (side === 'source') sourceWorkbook.value = wb
-            else targetWorkbook.value = wb
-        }
-        await compareWorkbooks()
-    } finally {
-        loading.value = false
-        input.value = ''
-    }
-}
-
-const compareWorkbooks = async () => {
-    if (!sourceWorkbook.value || !targetWorkbook.value) return
-
-    loading.value = true
-    const results: SheetDiff[] = []
-    const sourceSheets = sourceWorkbook.value.SheetNames
-    const targetSheets = targetWorkbook.value.SheetNames
-
-    const allSheetNames = Array.from(new Set([...sourceSheets, ...targetSheets]))
-
-    if (!diffWorker) {
-        diffWorker = new Worker(new URL('../../core/diff/diff.worker.ts', import.meta.url), { type: 'module' })
-    }
-
-    for (const name of allSheetNames) {
-        const sourceSheet = sourceWorkbook.value!.Sheets[name]
-        const targetSheet = targetWorkbook.value!.Sheets[name]
-
-        if (!sourceSheet && !targetSheet) continue
-
-        const sourceJSON = sourceSheet ? XLSX.utils.sheet_to_json(sourceSheet, { header: 1, raw: false, defval: '' }) as string[][] : []
-        const targetJSON = targetSheet ? XLSX.utils.sheet_to_json(targetSheet, { header: 1, raw: false, defval: '' }) as string[][] : []
-
-        const requestId = ++currentRequestId
-
-        const workerResult = await new Promise<any>((resolve, reject) => {
-            const handler = (e: MessageEvent) => {
-                const { requestId: resId, result, error } = e.data
-                if (resId === requestId) {
-                    diffWorker!.removeEventListener('message', handler)
-                    if (error) reject(error)
-                    else resolve(result)
-                }
-            }
-            diffWorker!.addEventListener('message', handler)
-            diffWorker!.postMessage({
-                type: 'excel',
-                source: sourceJSON,
-                target: targetJSON,
-                requestId
-            })
-        })
-
-        results.push({
-            name,
-            diffs: workerResult.diffs.map((d: any) => ({
-                ...d,
-                address: XLSX.utils.encode_cell({ r: d.row, c: d.col })
-            })),
-            sourceData: sourceJSON,
-            targetData: targetJSON,
-            rowCount: workerResult.maxRows,
-            colCount: workerResult.maxCols
-        })
-    }
-
-    diffResult.value = results
-    if (results.length > 0 && !selectedSheetName.value) {
-        selectedSheetName.value = results[0].name
-    }
-    loading.value = false
-}
-
-onUnmounted(() => {
-    if (diffWorker) {
-        diffWorker.terminate()
-        diffWorker = null
-    }
-})
-
-const clearItems = () => {
-    sourceWorkbook.value = null
-    targetWorkbook.value = null
-    diffResult.value = []
-    selectedSheetName.value = ''
-}
-
-const handlePaste = async (e: ClipboardEvent) => {
-    const files = extractFilesFromClipboard(e, (file) =>
-        file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')
-    )
-
-    if (files.length === 0) return
-    loading.value = true
-    try {
-        if (files.length >= 2) {
-            sourceWorkbook.value = await readWorkbook(files[0])
-            targetWorkbook.value = await readWorkbook(files[1])
-        } else {
-            const wb = await readWorkbook(files[0])
-            // If source is already there, put in target, else source
-            if (sourceWorkbook.value) targetWorkbook.value = wb
-            else sourceWorkbook.value = wb
-        }
-        await compareWorkbooks()
-    } finally {
-        loading.value = false
-    }
-}
-
-const sourceTableRef = ref<HTMLElement | null>(null)
-const targetTableRef = ref<HTMLElement | null>(null)
-const diffBarRef = ref<HTMLElement | null>(null)
-const activeCell = ref<{ row: number; col: number } | null>(null)
-const showDiffPanel = ref(false)
-
-let isProgrammaticScroll = false
-let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+const { sourceTableRef, targetTableRef, diffBarRef, syncScroll } = useScrollSync(viewMode)
 
 const scrollToCell = (row: number, col: number) => {
     activeCell.value = { row, col }
 
-    isProgrammaticScroll = true
-    if (scrollTimeout) clearTimeout(scrollTimeout)
-    scrollTimeout = setTimeout(() => {
-        isProgrammaticScroll = false
-    }, 1000)
-
-    // 使用 requestAnimationFrame，把多次滚动合并到同一帧，减少抖动
     requestAnimationFrame(() => {
         if (viewMode.value === 'split') {
             const sourceEl = document.getElementById(`cell-source-${row}-${col}`)
@@ -217,114 +57,12 @@ const scrollToCell = (row: number, col: number) => {
 
 const goToNextDiff = () => {
     if (!currentSheetDiff.value || !currentSheetDiff.value.diffs.length) return
-    // 获取所有差异块的索引
     const diffs = currentSheetDiff.value.diffs
     const currentIndex = activeCell.value ? diffs.findIndex(d => d.row === activeCell.value?.row && d.col === activeCell.value?.col) : -1
-    // 获取下一个差异块的索引
     const nextIndex = (currentIndex + 1) % diffs.length
-    // 获取下一个差异块
     const nextDiff = diffs[nextIndex]
     scrollToCell(nextDiff.row, nextDiff.col)
 }
-
-let activeScrollTarget: HTMLElement | null = null
-let syncScrollTimeout: ReturnType<typeof setTimeout> | null = null
-
-const syncScroll = (e: Event) => {
-    if (isProgrammaticScroll || viewMode.value !== 'split') return
-    const source = sourceTableRef.value
-    const target = targetTableRef.value
-    const diffBar = diffBarRef.value
-    if (!source || !target || !diffBar) return
-
-    const scrollTarget = e.target as HTMLElement
-
-    // Prevent scroll feedback loops
-    if (activeScrollTarget && activeScrollTarget !== scrollTarget) return
-    activeScrollTarget = scrollTarget
-
-    if (syncScrollTimeout) clearTimeout(syncScrollTimeout)
-    syncScrollTimeout = setTimeout(() => {
-        activeScrollTarget = null
-    }, 50)
-
-    if (scrollTarget === source) {
-        if (target.scrollTop !== source.scrollTop) target.scrollTop = source.scrollTop
-        if (diffBar.scrollTop !== source.scrollTop) diffBar.scrollTop = source.scrollTop
-        if (target.scrollLeft !== source.scrollLeft) target.scrollLeft = source.scrollLeft
-    } else if (scrollTarget === target) {
-        if (source.scrollTop !== target.scrollTop) source.scrollTop = target.scrollTop
-        if (diffBar.scrollTop !== target.scrollTop) diffBar.scrollTop = target.scrollTop
-        if (source.scrollLeft !== target.scrollLeft) source.scrollLeft = target.scrollLeft
-    } else if (scrollTarget === diffBar) {
-        if (source.scrollTop !== diffBar.scrollTop) source.scrollTop = diffBar.scrollTop
-        if (target.scrollTop !== diffBar.scrollTop) target.scrollTop = diffBar.scrollTop
-    }
-}
-
-onMounted(() => {
-    window.addEventListener('paste', handlePaste)
-})
-
-onUnmounted(() => {
-    window.removeEventListener('paste', handlePaste)
-})
-
-const getCellClass = (row: number, col: number, side: 'source' | 'target' | 'unified' = 'unified') => {
-    if (!currentSheetDiff.value) return ''
-
-    let baseClass = ''
-    const diff = currentSheetDiff.value.diffs.find(d => d.row === row && d.col === col)
-    if (diff) {
-        const sValue = currentSheetDiff.value.sourceData[row]?.[col]
-        const tValue = currentSheetDiff.value.targetData[row]?.[col]
-
-        if (sValue === undefined || sValue === null || sValue === '') {
-            if (side !== 'source') baseClass = 'cell-added'
-        }
-        else if (tValue === undefined || tValue === null || tValue === '') {
-            if (side !== 'target') baseClass = 'cell-removed'
-        }
-        else {
-            baseClass = 'cell-modified'
-        }
-    }
-
-    if (activeCell.value?.row === row && activeCell.value?.col === col) {
-        baseClass += ' cell--active'
-    }
-
-    return baseClass
-}
-
-const getColumnName = (col: number) => {
-    return XLSX.utils.encode_col(col)
-}
-
-const getSheetDiffCount = (name: string) => {
-    const sheet = diffResult.value.find(s => s.name === name)
-    return sheet?.diffs.length || 0
-}
-
-const getRowDiff = (row: number) => {
-    if (!currentSheetDiff.value) return null
-    const rowDiffs = currentSheetDiff.value.diffs.filter(d => d.row === row)
-    if (rowDiffs.length === 0) return null
-
-    // Find the "most important" diff type for this row
-    // Priority: Modified > Added/Removed
-    const modified = rowDiffs.find(d => getCellClass(d.row, d.col).includes('cell-modified'))
-    if (modified) return { type: 'modified', ...modified }
-
-    const added = rowDiffs.find(d => getCellClass(d.row, d.col).includes('cell-added'))
-    if (added) return { type: 'added', ...added }
-
-    const removed = rowDiffs.find(d => getCellClass(d.row, d.col).includes('cell-removed'))
-    if (removed) return { type: 'removed', ...removed }
-
-    return { type: 'modified', ...rowDiffs[0] }
-}
-
 </script>
 
 <template>

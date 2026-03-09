@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import mammoth from "mammoth";
 import ZBadge from "@/components/ui/base/ZBadge.vue";
 import ZButton from "@/components/ui/base/ZButton.vue";
 import ZTooltip from "@/components/ui/base/ZTooltip.vue";
@@ -9,322 +8,48 @@ import FileDropzone from "@/components/shared/FileDropzone.vue";
 import DiffBar from "@/components/shared/DiffBar.vue";
 import DiffLegend from "@/components/shared/DiffLegend.vue";
 import PrevNextButtons from "@/components/shared/PrevNextButtons.vue";
-import { readFileAsArrayBuffer } from "@/utils/file";
-import { extractFilesFromClipboard } from "@/utils/clipboard";
-import { getNextIndex, getPrevIndex } from "@/utils/diffNavigation";
+import { useWordDiff } from "@/composables/useWordDiff";
 
 const { t } = useI18n();
 
-interface ParagraphBlock {
-  type: "equal" | "delete" | "insert" | "modified";
-  sourceText: string;
-  targetText: string;
-  sourceHtml?: string;
-  targetHtml?: string;
+const leftPanelRef = ref<HTMLElement | null>(null)
+const rightPanelRef = ref<HTMLElement | null>(null)
+const diffBarRef = ref<HTMLElement | null>(null)
+
+const {
+  sourceFileName,
+  targetFileName,
+  loading,
+  loadError,
+  bothLoaded,
+  paragraphBlocks,
+  activeBlockIdx,
+  diffCount,
+  handleFile,
+  clearItems,
+  handlePaste,
+  scrollToBlock,
+  goToNextDiff,
+  goToPrevDiff,
+} = useWordDiff()
+
+const handleScroll = (idx: number) => scrollToBlock(idx, leftPanelRef.value, rightPanelRef.value, diffBarRef.value)
+const handleNext = () => {
+  const next = goToNextDiff()
+  if (next !== undefined) scrollToBlock(next, leftPanelRef.value, rightPanelRef.value, diffBarRef.value)
 }
-
-const sourceHtml = ref("");
-const targetHtml = ref("");
-const sourceFileName = ref("");
-const targetFileName = ref("");
-const loading = ref(false);
-const loadError = ref("");
-
-const bothLoaded = computed(() => !!sourceHtml.value && !!targetHtml.value);
-
-// 从 HTML 中提取段落（按 p、h1-h6、li 等块级元素）
-function extractParagraphs(html: string): { texts: string[]; htmls: string[] } {
-  if (!html.trim()) return { texts: [], htmls: [] };
-  const div = document.createElement("div");
-  div.innerHTML = html;
-  const blocks = div.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li");
-  const texts: string[] = [];
-  const htmls: string[] = [];
-  blocks.forEach((el) => {
-    const text = (el.textContent || "").trim();
-    const h = el.outerHTML;
-    texts.push(text);
-    htmls.push(h);
-  });
-  if (texts.length === 0 && html.trim()) {
-    texts.push(div.textContent?.trim() || "");
-    htmls.push(div.innerHTML);
-  }
-  return { texts, htmls };
+const handlePrev = () => {
+  const prev = goToPrevDiff()
+  if (prev !== undefined) scrollToBlock(prev, leftPanelRef.value, rightPanelRef.value, diffBarRef.value)
 }
-
-const paragraphBlocks = ref<ParagraphBlock[]>([]);
-const isDiffing = ref(false);
-
-let diffWorker: Worker | null = null;
-let currentRequestId = 0;
-
-watch(
-  [sourceHtml, targetHtml],
-  async ([srcHtml, tgtHtml]) => {
-    if (!srcHtml || !tgtHtml) {
-      paragraphBlocks.value = [];
-      return;
-    }
-
-    isDiffing.value = true;
-    const src = extractParagraphs(srcHtml);
-    const tgt = extractParagraphs(tgtHtml);
-
-    if (!diffWorker) {
-      diffWorker = new Worker(
-        new URL("../../core/diff/diff.worker.ts", import.meta.url),
-        { type: "module" },
-      );
-    }
-
-    const requestId = ++currentRequestId;
-    try {
-      const workerResult = await new Promise<any>((resolve, reject) => {
-        const handler = (e: MessageEvent) => {
-          const { requestId: resId, result, error } = e.data;
-          if (resId === requestId) {
-            diffWorker!.removeEventListener("message", handler);
-            if (error) reject(error);
-            else resolve(result);
-          }
-        };
-        diffWorker!.addEventListener("message", handler);
-        diffWorker!.postMessage({
-          type: "word",
-          source: src.texts.join("\n"),
-          target: tgt.texts.join("\n"),
-          requestId,
-        });
-      });
-
-      const blocks: ParagraphBlock[] = [];
-      let srcIdx = 0;
-      let tgtIdx = 0;
-
-      for (const chunk of workerResult.chunks) {
-        const lines = (chunk.value || "").split("\n");
-        const lines2 = (chunk.value2 ?? "").split("\n");
-
-        if (chunk.type === "equal") {
-          for (let i = 0; i < lines.length; i++) {
-            blocks.push({
-              type: "equal",
-              sourceText: lines[i] ?? "",
-              targetText: lines[i] ?? "",
-              sourceHtml: src.htmls[srcIdx + i],
-              targetHtml: tgt.htmls[tgtIdx + i],
-            });
-          }
-          srcIdx += lines.length;
-          tgtIdx += lines.length;
-        } else if (chunk.type === "delete") {
-          for (const line of lines) {
-            blocks.push({
-              type: "delete",
-              sourceText: line,
-              targetText: "",
-              sourceHtml: src.htmls[srcIdx],
-            });
-            srcIdx++;
-          }
-        } else if (chunk.type === "insert") {
-          for (const line of lines) {
-            blocks.push({
-              type: "insert",
-              sourceText: "",
-              targetText: line,
-              targetHtml: tgt.htmls[tgtIdx],
-            });
-            tgtIdx++;
-          }
-        } else if (chunk.type === "modified") {
-          const maxLen = Math.max(lines.length, lines2.length);
-          for (let i = 0; i < maxLen; i++) {
-            blocks.push({
-              type: "modified",
-              sourceText: lines[i] ?? "",
-              targetText: lines2[i] ?? "",
-              sourceHtml: src.htmls[srcIdx + i],
-              targetHtml: tgt.htmls[tgtIdx + i],
-            });
-          }
-          srcIdx += lines.length;
-          tgtIdx += lines2.length;
-        }
-      }
-      paragraphBlocks.value = blocks;
-    } catch (e) {
-      console.error("Word diff calculation failed:", e);
-    } finally {
-      if (requestId === currentRequestId) {
-        isDiffing.value = false;
-      }
-    }
-  },
-  { immediate: true },
-);
-
-onUnmounted(() => {
-  if (diffWorker) {
-    diffWorker.terminate();
-    diffWorker = null;
-  }
-});
-
-const diffCount = computed(() => {
-  return paragraphBlocks.value.filter((b) => b.type !== "equal").length;
-});
-
-const handleFile = async (e: Event, side: "source" | "target") => {
-  const input = e.target as HTMLInputElement;
-  const files = input.files;
-  if (!files || files.length === 0) return;
-
-  loading.value = true;
-  loadError.value = "";
-  try {
-    if (files.length >= 2) {
-      const [buf1, buf2] = await Promise.all([
-        readFileAsArrayBuffer(files[0]),
-        readFileAsArrayBuffer(files[1]),
-      ]);
-      const [r1, r2] = await Promise.all([
-        mammoth.convertToHtml({ arrayBuffer: buf1 }),
-        mammoth.convertToHtml({ arrayBuffer: buf2 }),
-      ]);
-      sourceHtml.value = r1.value;
-      targetHtml.value = r2.value;
-      sourceFileName.value = files[0].name;
-      targetFileName.value = files[1].name;
-    } else {
-      const buf = await readFileAsArrayBuffer(files[0]);
-      const result = await mammoth.convertToHtml({ arrayBuffer: buf });
-      if (side === "source") {
-        sourceHtml.value = result.value;
-        sourceFileName.value = files[0].name;
-      } else {
-        targetHtml.value = result.value;
-        targetFileName.value = files[0].name;
-      }
-    }
-  } catch (err) {
-    loadError.value = (err as Error).message || t("wordLoadFailed");
-  } finally {
-    loading.value = false;
-    input.value = "";
-  }
-};
-
-const clearItems = () => {
-  sourceHtml.value = "";
-  targetHtml.value = "";
-  sourceFileName.value = "";
-  targetFileName.value = "";
-  loadError.value = "";
-};
-
-const handlePaste = async (e: ClipboardEvent) => {
-  const files = extractFilesFromClipboard(e, (file) =>
-    /\.docx?$/i.test(file.name),
-  );
-
-  if (files.length === 0) return;
-  loading.value = true;
-  loadError.value = "";
-  try {
-    if (files.length >= 2) {
-      const [buf1, buf2] = await Promise.all([
-        readFileAsArrayBuffer(files[0]),
-        readFileAsArrayBuffer(files[1]),
-      ]);
-      const [r1, r2] = await Promise.all([
-        mammoth.convertToHtml({ arrayBuffer: buf1 }),
-        mammoth.convertToHtml({ arrayBuffer: buf2 }),
-      ]);
-      sourceHtml.value = r1.value;
-      targetHtml.value = r2.value;
-      sourceFileName.value = files[0].name;
-      targetFileName.value = files[1].name;
-    } else {
-      const buf = await readFileAsArrayBuffer(files[0]);
-      const result = await mammoth.convertToHtml({ arrayBuffer: buf });
-      if (sourceHtml.value) {
-        targetHtml.value = result.value;
-        targetFileName.value = files[0].name;
-      } else {
-        sourceHtml.value = result.value;
-        sourceFileName.value = files[0].name;
-      }
-    }
-  } catch (err) {
-    loadError.value = (err as Error).message || t("wordLoadFailed");
-  } finally {
-    loading.value = false;
-  }
-};
-
-// 滚动同步
-const leftPanelRef = ref<HTMLElement | null>(null);
-const rightPanelRef = ref<HTMLElement | null>(null);
-const diffBarRef = ref<HTMLElement | null>(null);
-const activeBlockIdx = ref(-1);
-let isProgrammaticScroll = false;
-
-const scrollToBlock = (idx: number) => {
-  activeBlockIdx.value = idx;
-  const left = leftPanelRef.value;
-  const right = rightPanelRef.value;
-  const bar = diffBarRef.value;
-  if (!left || !right || !bar) return;
-
-  isProgrammaticScroll = true;
-  // 获取两个目标元素
-  const sourceEl = left.querySelector(`#source-${idx}`);
-  const targetEl = right.querySelector(`#target-${idx}`);
-  const barEl = ((bar as any)?.scrollContainer as HTMLElement)?.querySelector(
-    `#diff-bar-item-${idx}`,
-  );
-
-  // 使用 requestAnimationFrame 确保在同一帧中处理滚动
-  requestAnimationFrame(() => {
-    // 先禁用平滑滚动，手动控制滚动动画
-    sourceEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-    targetEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-    barEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => {
-      isProgrammaticScroll = false;
-    }, 500);
-  });
-};
-
-const goToNextDiff = () => {
-  const indices = paragraphBlocks.value
-    .map((b, i) => (b.type !== "equal" ? i : -1))
-    .filter((i) => i >= 0);
-  const next = getNextIndex(indices, activeBlockIdx.value);
-  if (next === -1) return;
-  scrollToBlock(next);
-};
-
-const goToPrevDiff = () => {
-  const indices = paragraphBlocks.value
-    .map((b, i) => (b.type !== "equal" ? i : -1))
-    .filter((i) => i >= 0);
-  const prev = getPrevIndex(indices, activeBlockIdx.value);
-  if (prev === -1) return;
-  scrollToBlock(prev);
-};
-
-let activeScrollTarget: HTMLElement | null = null;
 
 onMounted(() => {
-  window.addEventListener("paste", handlePaste);
-});
+  window.addEventListener("paste", handlePaste)
+})
 
 onUnmounted(() => {
-  window.removeEventListener("paste", handlePaste);
-});
+  window.removeEventListener("paste", handlePaste)
+})
 </script>
 
 <template>
@@ -347,11 +72,11 @@ onUnmounted(() => {
           <div v-if="diffCount > 0"
             class="flex items-center gap-1.5 bg-[var(--color-surface)] rounded-md border border-[var(--color-border)] px-2 py-1">
             <span class="text-xs font-medium text-[var(--color-cta)] cursor-pointer hover:underline"
-              @click="goToNextDiff">
+              @click="handleNext">
               {{ t("wordDiffCount", { n: diffCount }) }}
             </span>
-            <PrevNextButtons :prev-label="t('prevChange')" :next-label="t('nextChange')" @prev="goToPrevDiff"
-              @next="goToNextDiff" />
+            <PrevNextButtons :prev-label="t('prevChange')" :next-label="t('nextChange')" @prev="handlePrev"
+              @next="handleNext" />
           </div>
           <span v-else class="text-xs text-[var(--color-secondary)]">{{
             t("wordNoDiff")
@@ -382,7 +107,7 @@ onUnmounted(() => {
     <div class="flex-1 overflow-hidden relative bg-[var(--color-surface)]">
       <!-- Dropzones -->
       <div v-if="!bothLoaded" class="h-full flex gap-4 p-5">
-        <FileDropzone side="source" :title="t('wordSource')" :hint="t('uploadWord')" :is-ready="!!sourceHtml"
+        <FileDropzone side="source" :title="t('wordSource')" :hint="t('uploadWord')" :is-ready="!!sourceFileName"
           :fileName="sourceFileName" accept=".docx,.doc" @change="handleFile($event, 'source')">
           <template #icon>
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -394,7 +119,7 @@ onUnmounted(() => {
             </svg>
           </template>
         </FileDropzone>
-        <FileDropzone side="target" :title="t('wordTarget')" :hint="t('uploadWord')" :is-ready="!!targetHtml"
+        <FileDropzone side="target" :title="t('wordTarget')" :hint="t('uploadWord')" :is-ready="!!targetFileName"
           :fileName="targetFileName" accept=".docx,.doc" @change="handleFile($event, 'target')">
           <template #icon>
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -422,11 +147,10 @@ onUnmounted(() => {
             <div :id="'source-' + idx" v-for="(block, idx) in paragraphBlocks" :key="'src-' + idx" :class="[
               'word-block min-h-[32px] py-1.5 px-2 rounded',
               block.type === 'delete' && 'bg-[var(--color-delete-bg)]',
-              block.type === 'modified' && 'bg-[var(--color-delete-bg)]',
+              block.type === 'modify' && 'bg-[var(--color-delete-bg)]',
               activeBlockIdx === idx && 'ring-2 ring-[var(--color-cta)]',
             ]">
-              <div v-if="block.sourceHtml" class="word-html" v-html="block.sourceHtml"></div>
-              <div v-else-if="block.sourceText" class="text-[var(--color-text)]">
+              <div class="text-[var(--color-text)] whitespace-pre-wrap">
                 {{ block.sourceText || t("wordEmptyParagraph") }}
               </div>
             </div>
@@ -435,7 +159,7 @@ onUnmounted(() => {
 
         <!-- Center: Slim Diff Bar -->
         <DiffBar ref="diffBarRef" :title="t('wordDiffShort') || t('diffResult')" :items="paragraphBlocks"
-          :active-index="activeBlockIdx" @item-click="scrollToBlock" />
+          :active-index="activeBlockIdx" @item-click="handleScroll" />
 
         <!-- Right: Target -->
         <div ref="rightPanelRef" class="flex-1 overflow-auto custom-scrollbar">
@@ -443,11 +167,10 @@ onUnmounted(() => {
             <div :id="'target-' + idx" v-for="(block, idx) in paragraphBlocks" :key="'tgt-' + idx" :class="[
               'word-block min-h-[32px] py-1.5 px-2 rounded',
               block.type === 'insert' && 'bg-[var(--color-insert-bg)]',
-              block.type === 'modified' && 'bg-[var(--color-insert-bg)]',
+              block.type === 'modify' && 'bg-[var(--color-insert-bg)]',
               activeBlockIdx === idx && 'ring-2 ring-[var(--color-cta)]',
             ]">
-              <div v-if="block.targetHtml" class="word-html" v-html="block.targetHtml"></div>
-              <div v-else-if="block.targetText" class="text-[var(--color-text)]">
+              <div class="text-[var(--color-text)] whitespace-pre-wrap">
                 {{ block.targetText || t("wordEmptyParagraph") }}
               </div>
             </div>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { toRaw, ref, shallowRef, computed, onMounted, onUnmounted, nextTick, markRaw } from "vue";
+import { shallowRef, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import * as pdfjsLib from "pdfjs-dist";
 import ZBadge from "@/components/ui/base/ZBadge.vue";
 import ZButton from "@/components/ui/base/ZButton.vue";
 import ZTooltip from "@/components/ui/base/ZTooltip.vue";
@@ -9,817 +8,59 @@ import FileDropzone from "@/components/shared/FileDropzone.vue";
 import DiffBar from "@/components/shared/DiffBar.vue";
 import DiffLegend from "@/components/shared/DiffLegend.vue";
 import PrevNextButtons from "@/components/shared/PrevNextButtons.vue";
-import { readFileAsArrayBuffer } from "@/utils/file";
-import { extractFilesFromClipboard } from "@/utils/clipboard";
-import { getNextIndex, getPrevIndex } from "@/utils/diffNavigation";
-import type { IOcrEngine, OcrConfig } from "@/core/ocr";
-import { createOcrEngine } from "@/core/ocr";
-import { TextItem } from '@/core/diff/pdf/pdf.ts'
-/**
- * 按Y坐标分组为行
- */
-function groupByLine(items, tolerance = 2) {
-  const lines = [];
-
-  for (const item of items) {
-    const y = item.transform[5];
-
-    let line = lines.find(l => Math.abs(l.y - y) < tolerance);
-
-    if (!line) {
-      line = { y, items: [] };
-      lines.push(line);
-    }
-
-    line.items.push(item);
-  }
-
-  return lines.map(line => {
-    line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-    return line.items;
-  });
-}
-
-/**
- * 合并一行 token
- */
-function mergeLineTokens(items) {
-  const noSpaceBefore = new Set(["|", ",", ".", ":", ";", ")", "]"]);
-  const noSpaceAfter = new Set(["(", "["]);
-
-  let text = "";
-
-  for (let i = 0; i < items.length; i++) {
-    const current = items[i];
-    const prev = items[i - 1];
-
-    const str = current.str;
-
-    if (!prev) {
-      text += str;
-      continue;
-    }
-
-    const prevStr = prev.str;
-
-    const gap = current.transform[4] - (prev.transform[4] + prev.width);
-
-    if (noSpaceBefore.has(str)) {
-      text += str;
-    }
-    else if (noSpaceAfter.has(prevStr)) {
-      text += str;
-    }
-    else if (gap > 2) {
-      text += " " + str;
-    }
-    else {
-      text += str;
-    }
-  }
-
-  return text.trim();
-}
+import { usePdfDiff } from "@/composables/usePdfDiff";
 
 const { t } = useI18n();
 
-// 设置 PDF.js worker
-import 'pdfjs-dist/build/pdf.worker.min.mjs'
+const sourceViewerRef = shallowRef<HTMLElement | null>(null)
+const targetViewerRef = shallowRef<HTMLElement | null>(null)
 
-// 差异块接口
-interface DiffBlock {
-  type: "equal" | "delete" | "insert" | "modified";
-  sourceText: string;
-  targetText: string;
-  sourcePage?: number;
-  targetPage?: number;
-  sourceIndex?: number;
-  targetIndex?: number;
+const {
+  sourceFileName,
+  targetFileName,
+  loading,
+  loadError,
+  ocrStatus,
+  ocrEngine,
+  bothLoaded,
+  diffBlocks,
+  isDiffing,
+  activeBlockIdx,
+  showHighlights,
+  diffCount,
+  processFile,
+  clearItems,
+  processPaste,
+  scrollToBlock,
+  goToNextDiff,
+  goToPrevDiff,
+  toggleHighlights,
+} = usePdfDiff()
+
+const handleClear = () => clearItems(sourceViewerRef.value, targetViewerRef.value)
+const handleToggleHighlight = () => toggleHighlights(sourceViewerRef.value, targetViewerRef.value)
+const handleScroll = (idx: number) => scrollToBlock(idx, sourceViewerRef.value, targetViewerRef.value)
+const handleNext = () => {
+  const next = goToNextDiff()
+  if (next !== undefined) scrollToBlock(next, sourceViewerRef.value, targetViewerRef.value)
 }
-
-// 差异高亮项
-interface DiffHighlight {
-  text: string;
-  type: "delete" | "insert" | "modified";
-  pageNum: number;
-  bbox: { x: number; y: number; width: number; height: number };
-  index: number;
+const handlePrev = () => {
+  const prev = goToPrevDiff()
+  if (prev !== undefined) scrollToBlock(prev, sourceViewerRef.value, targetViewerRef.value)
 }
-
-const sourceFileName = ref("");
-const targetFileName = ref("");
-const loading = ref(false);
-const loadError = ref("");
-const ocrStatus = ref("");
-
-// OCR配置 - 只支持pdfjs和tesseract
-const ocrEngine = ref<'pdfjs' | 'tesseract'>('pdfjs');
-
-// PDF文档引用
-const sourcePdfDoc = shallowRef<pdfjsLib.PDFDocumentProxy | null>(null);
-const targetPdfDoc = shallowRef<pdfjsLib.PDFDocumentProxy | null>(null);
-
-// 文本项
-const sourceTextItems = ref<TextItem[]>([]);
-const targetTextItems = ref<TextItem[]>([]);
-
-const bothLoaded = computed(() => !!sourcePdfDoc.value && !!targetPdfDoc.value);
-
-// 差异状态
-const diffBlocks = ref<DiffBlock[]>([]);
-const diffHighlights = ref<{ source: DiffHighlight[]; target: DiffHighlight[] }>({
-  source: [],
-  target: [],
-});
-const isDiffing = ref(false);
-const activeBlockIdx = ref(-1);
-const showHighlights = ref(false);
-
-// OCR引擎实例
-let ocrEngineInstance: IOcrEngine | null = null;
-let diffWorker: Worker | null = null;
-let currentRequestId = 0;
-
-// 初始化OCR引擎
-async function initOcrEngine(): Promise<IOcrEngine> {
-  if (ocrEngineInstance && ocrEngineInstance.name === ocrEngine.value) {
-    return ocrEngineInstance;
-  }
-
-  const config: OcrConfig = {
-    engine: ocrEngine.value,
-    language: 'chi_sim+eng',
-  };
-
-  ocrEngineInstance = createOcrEngine(config);
-
-  if (ocrEngineInstance.init) {
-    ocrStatus.value = t('ocrInitializing') || 'Initializing OCR engine...';
-    await ocrEngineInstance.init();
-  }
-
-  return ocrEngineInstance;
+const handleFile = (e: Event, side: "source" | "target") => {
+  processFile(e, side, () => sourceViewerRef.value, () => targetViewerRef.value)
 }
-
-// 使用PDF.js提取文本
-async function extractTextItemsFromPdf(pdf: pdfjsLib.PDFDocumentProxy): Promise<TextItem[]> {
-  const items: TextItem[] = [];
-  const numPages = pdf.numPages;
-  let globalIndex = 0;
-
-
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent({
-      disableNormalization: false
-    });
-
-
-    const lines = groupByLine(textContent.items);
-
-    for (const line of lines) {
-      const mergedText = mergeLineTokens(line);
-
-      if (mergedText.trim()) {
-        const firstItem = line[0];
-        const lastItem = line[line.length - 1];
-
-        const transform = firstItem.transform;
-        const [scaleX, skewY, skewX, scaleY, translateX, translateY] = transform || [12, 0, 0, 12, 0, 0];
-
-        const bboxX = translateX || 0;
-        const bboxY = translateY || 0;
-        const bboxWidth = lastItem.transform[4] + lastItem.width - bboxX;
-        const bboxHeight = Math.abs(scaleY || 12);
-
-        items.push({
-          str: mergedText,
-          transform,
-          pageNum,
-          index: globalIndex++,
-          bbox: {
-            x: bboxX,
-            y: bboxY,
-            width: bboxWidth,
-            height: bboxHeight,
-          },
-        });
-      }
-    }
-  }
-
-  items.slice(0, 5).forEach((item, i) => {
-  });
-
-  return items;
+const handlePaste = (e: ClipboardEvent) => {
+  processPaste(e, () => sourceViewerRef.value, () => targetViewerRef.value)
 }
-
-// 使用OCR识别PDF页面
-async function extractTextItemsWithOcr(
-  pdf: pdfjsLib.PDFDocumentProxy,
-  scale: number = 1.5
-): Promise<TextItem[]> {
-  const items: TextItem[] = [];
-  const numPages = pdf.numPages;
-  let globalIndex = 0;
-
-
-  const engine = await initOcrEngine();
-
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    ocrStatus.value = `Processing page ${pageNum}/${numPages}...`;
-
-    // 渲染PDF页面为canvas
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext('2d')!;
-
-    // 设置白色背景（某些PDF可能透明）
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    await page.render({
-      canvasContext: ctx,
-      viewport,
-      canvas,
-    }).promise;
-
-    // 调试：检查canvas内容
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const hasContent = imageData.data.some((v, i) => i % 4 !== 3 && v !== 255);
-
-    // 使用canvas.toDataURL()传递图像，Tesseract.js处理更稳定
-    const imageUrl = canvas.toDataURL('image/png');
-
-    const ocrResults = await engine.recognize(imageUrl);
-
-    // 转换为TextItem格式
-    for (const ocrItem of ocrResults) {
-      if (ocrItem.text.trim()) {
-        items.push({
-          str: ocrItem.text,
-          transform: [
-            ocrItem.bbox.height,
-            0,
-            0,
-            ocrItem.bbox.height,
-            ocrItem.bbox.x,
-            ocrItem.bbox.y,
-          ],
-          pageNum,
-          index: globalIndex++,
-          bbox: ocrItem.bbox,
-          confidence: ocrItem.confidence,
-        });
-      }
-    }
-  }
-
-  return items;
-}
-
-// 提取文本项（根据选择的引擎）
-async function extractTextItems(pdf: pdfjsLib.PDFDocumentProxy): Promise<TextItem[]> {
-  if (ocrEngine.value === 'tesseract') {
-    return extractTextItemsWithOcr(pdf);
-  } else {
-    return extractTextItemsFromPdf(pdf);
-  }
-}
-
-// 渲染单个PDF页面
-async function renderPage(
-  pdf: pdfjsLib.PDFDocumentProxy,
-  pageNum: number,
-  container: HTMLElement,
-  highlights: DiffHighlight[] = []
-): Promise<void> {
-  const page = await pdf.getPage(pageNum);
-  const scale = 1.2;
-  const viewport = page.getViewport({ scale });
-
-  const pageWrapper = document.createElement("div");
-  pageWrapper.className = "pdf-page-wrapper";
-  pageWrapper.id = `page-${pageNum}`;
-  pageWrapper.dataset.pageNum = String(pageNum);
-
-  const canvasContainer = document.createElement("div");
-  canvasContainer.className = "pdf-canvas-container";
-
-  const canvas = document.createElement("canvas");
-  canvas.className = "pdf-canvas";
-  const ctx = canvas.getContext("2d")!;
-
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-
-  await page.render({
-    canvasContext: ctx,
-    viewport,
-    canvas,
-  }).promise;
-
-  canvasContainer.appendChild(canvas);
-
-  // 如果有高亮，在 canvas 上直接绘制
-  const pageHighlights = highlights.filter((h) => h.pageNum === pageNum);
-  if (pageHighlights.length > 0) {
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      for (const highlight of pageHighlights) {
-        const { x, y, width, height } = highlight.bbox;
-
-        // PDF坐标转换到Canvas坐标
-        // PDF坐标系：左下角为原点，y轴向上
-        // Canvas坐标系：左上角为原点，y轴向下
-        const canvasY = viewport.height - (y + height) * scale;
-        const canvasX = x * scale;
-        const canvasW = width * scale;
-        const canvasH = height * scale;
-
-        if (canvasW > 0 && canvasH > 0) {
-          // 绘制背景色
-          if (highlight.type === 'delete') {
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-          } else if (highlight.type === 'insert') {
-            ctx.fillStyle = 'rgba(0, 200, 0, 0.3)';
-          } else if (highlight.type === 'modified') {
-            ctx.fillStyle = 'rgba(255, 165, 0, 0.3)';
-          }
-          ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
-
-          // 绘制底部边框
-          if (highlight.type === 'delete') {
-            ctx.fillStyle = '#ff0000';
-          } else if (highlight.type === 'insert') {
-            ctx.fillStyle = '#00c800';
-          } else if (highlight.type === 'modified') {
-            ctx.fillStyle = '#ffa500';
-          }
-          ctx.fillRect(canvasX, canvasY + canvasH - 2, canvasW, 2);
-        }
-      }
-    }
-  }
-
-  pageWrapper.appendChild(canvasContainer);
-  container.appendChild(pageWrapper);
-}
-
-// 渲染整个PDF
-async function renderPdf(
-  pdf: pdfjsLib.PDFDocumentProxy,
-  container: HTMLElement,
-  highlights: DiffHighlight[] = []
-): Promise<void> {
-  container.innerHTML = "";
-  const numPages = pdf.numPages;
-
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    await renderPage(pdf, pageNum, container, highlights);
-  }
-}
-
-// 计算差异并生成高亮
-async function computeDiff(
-  srcItems: TextItem[],
-  tgtItems: TextItem[]
-): Promise<void> {
-  if (srcItems.length === 0 || tgtItems.length === 0) {
-    diffBlocks.value = [];
-    return;
-  }
-
-  isDiffing.value = true;
-
-  if (!diffWorker) {
-    diffWorker = new Worker(
-      new URL("../../core/diff/diff.worker.ts", import.meta.url),
-      { type: "module" }
-    );
-  }
-
-  const requestId = ++currentRequestId;
-  try {
-
-    const workerResult = await new Promise<any>((resolve, reject) => {
-      const handler = (e: MessageEvent) => {
-        const { requestId: resId, result, error } = e.data;
-        if (resId === requestId) {
-          diffWorker!.removeEventListener("message", handler);
-          if (error) reject(error);
-          else resolve(result);
-        }
-      };
-      diffWorker!.addEventListener("message", handler);
-      diffWorker!.postMessage({
-        type: "pdf",
-        source: toRaw(srcItems),
-        target: toRaw(tgtItems),
-        requestId,
-      });
-    });
-
-    const blocks: DiffBlock[] = [];
-    const sourceHighlights: DiffHighlight[] = [];
-    const targetHighlights: DiffHighlight[] = [];
-
-
-    let srcIdx = 0;
-    let tgtIdx = 0;
-
-    for (const diff of workerResult) {
-      const sourceItem = diff.source;
-      const targetItem = diff.target;
-
-      if (diff.type === 'equal') {
-        blocks.push({
-          type: 'equal',
-          sourceText: sourceItem?.str || '',
-          targetText: targetItem?.str || '',
-          sourcePage: sourceItem?.pageNum,
-          targetPage: targetItem?.pageNum,
-          sourceIndex: srcIdx,
-          targetIndex: tgtIdx,
-        });
-        srcIdx++;
-        tgtIdx++;
-      } else if (diff.type === 'delete') {
-        blocks.push({
-          type: 'delete',
-          sourceText: sourceItem?.str || '',
-          targetText: '',
-          sourcePage: sourceItem?.pageNum,
-          targetPage: tgtItems[tgtIdx]?.pageNum,
-          sourceIndex: srcIdx,
-          targetIndex: tgtIdx,
-        });
-        if (sourceItem) {
-          sourceHighlights.push({
-            text: sourceItem.str || '',
-            type: 'delete',
-            pageNum: sourceItem.pageNum,
-            bbox: sourceItem.bbox || { x: 0, y: 0, width: 100, height: 20 },
-            index: srcIdx,
-          });
-        }
-        srcIdx++;
-      } else if (diff.type === 'insert') {
-        blocks.push({
-          type: 'insert',
-          sourceText: '',
-          targetText: targetItem?.str || '',
-          sourcePage: srcItems[srcIdx]?.pageNum,
-          targetPage: targetItem?.pageNum,
-          sourceIndex: srcIdx,
-          targetIndex: tgtIdx,
-        });
-        if (targetItem) {
-          targetHighlights.push({
-            text: targetItem.str || '',
-            type: 'insert',
-            pageNum: targetItem.pageNum,
-            bbox: targetItem.bbox || { x: 0, y: 0, width: 100, height: 20 },
-            index: tgtIdx,
-          });
-        }
-        tgtIdx++;
-      } else if (diff.type === 'modify') {
-        blocks.push({
-          type: 'modified',
-          sourceText: sourceItem?.str || '',
-          targetText: targetItem?.str || '',
-          sourcePage: sourceItem?.pageNum,
-          targetPage: targetItem?.pageNum,
-          sourceIndex: srcIdx,
-          targetIndex: tgtIdx,
-        });
-        if (sourceItem) {
-          sourceHighlights.push({
-            text: sourceItem.str || '',
-            type: 'modified',
-            pageNum: sourceItem.pageNum,
-            bbox: sourceItem.bbox || { x: 0, y: 0, width: 100, height: 20 },
-            index: srcIdx,
-          });
-        }
-        if (targetItem) {
-          targetHighlights.push({
-            text: targetItem.str || '',
-            type: 'modified',
-            pageNum: targetItem.pageNum,
-            bbox: targetItem.bbox || { x: 0, y: 0, width: 100, height: 20 },
-            index: tgtIdx,
-          });
-        }
-        srcIdx++;
-        tgtIdx++;
-      }
-    }
-
-    diffBlocks.value = blocks;
-    diffHighlights.value = { source: sourceHighlights, target: targetHighlights };
-
-
-    // 重新渲染PDF（不带高亮）
-    await nextTick();
-    if (sourceViewerRef.value && sourcePdfDoc.value) {
-      await renderPdf(sourcePdfDoc.value, sourceViewerRef.value);
-    }
-    if (targetViewerRef.value && targetPdfDoc.value) {
-      await renderPdf(targetPdfDoc.value, targetViewerRef.value);
-    }
-
-    // 如果当前显示高亮，则重新渲染高亮
-    if (showHighlights.value) {
-      await renderHighlights();
-    }
-  } catch (e) {
-    console.error("PDF diff calculation failed:", e);
-    loadError.value = String(e);
-  } finally {
-    if (requestId === currentRequestId) {
-      isDiffing.value = false;
-      ocrStatus.value = "";
-    }
-  }
-}
-
-const diffCount = computed(() => {
-  return diffBlocks.value.filter((b) => b.type !== "equal").length;
-});
-
-// 切换高亮显示
-async function toggleHighlights() {
-  if (diffCount.value === 0) return;
-
-  showHighlights.value = !showHighlights.value;
-
-  if (showHighlights.value) {
-    await renderHighlights();
-  } else {
-    // 重新渲染不带高亮的PDF
-    if (sourceViewerRef.value && sourcePdfDoc.value) {
-      await renderPdf(sourcePdfDoc.value, sourceViewerRef.value);
-    }
-    if (targetViewerRef.value && targetPdfDoc.value) {
-      await renderPdf(targetPdfDoc.value, targetViewerRef.value);
-    }
-  }
-}
-
-// 渲染高亮
-async function renderHighlights() {
-  debugger
-  if (!sourceViewerRef.value || !targetViewerRef.value) return;
-  if (!sourcePdfDoc.value || !targetPdfDoc.value) return;
-
-  // 保存当前滚动位置
-  const sourceScrollTop = sourceViewerRef.value.parentElement?.scrollTop || 0;
-  const targetScrollTop = targetViewerRef.value.parentElement?.scrollTop || 0;
-
-  await renderPdf(sourcePdfDoc.value, sourceViewerRef.value, diffHighlights.value.source);
-  await renderPdf(targetPdfDoc.value, targetViewerRef.value, diffHighlights.value.target);
-
-  // 恢复滚动位置
-  if (sourceViewerRef.value.parentElement) {
-    sourceViewerRef.value.parentElement.scrollTop = sourceScrollTop;
-  }
-  if (targetViewerRef.value.parentElement) {
-    targetViewerRef.value.parentElement.scrollTop = targetScrollTop;
-  }
-}
-
-// 处理文件上传
-const sourceViewerRef = ref<HTMLElement | null>(null);
-const targetViewerRef = ref<HTMLElement | null>(null);
-const leftPanelRef = ref<HTMLElement | null>(null);
-const rightPanelRef = ref<HTMLElement | null>(null);
-
-// 处理文件加载后的差异计算
-async function processAfterFileLoad() {
-  // 如果使用OCR引擎
-  if (ocrEngine.value === 'tesseract') {
-    // 只有当两个文件都已加载时才进行OCR识别和对比
-    if (sourcePdfDoc.value && targetPdfDoc.value) {
-      // 同时对两个PDF进行OCR识别
-      const [items1, items2] = await Promise.all([
-        extractTextItems(sourcePdfDoc.value),
-        extractTextItems(targetPdfDoc.value),
-      ]);
-      sourceTextItems.value = items1;
-      targetTextItems.value = items2;
-
-      // 渲染PDF
-      await nextTick();
-      await Promise.all([
-        sourceViewerRef.value ? renderPdf(sourcePdfDoc.value, sourceViewerRef.value) : Promise.resolve(),
-        targetViewerRef.value ? renderPdf(targetPdfDoc.value, targetViewerRef.value) : Promise.resolve(),
-      ]);
-
-      // 计算差异
-      await computeDiff(items1, items2);
-    }
-  } else {
-    // PDF.js模式：单个文件加载后即可提取文本
-    if (sourcePdfDoc.value && sourceTextItems.value.length === 0) {
-      const items = await extractTextItemsFromPdf(sourcePdfDoc.value);
-      sourceTextItems.value = items;
-      if (sourceViewerRef.value) {
-        await renderPdf(sourcePdfDoc.value, sourceViewerRef.value);
-      }
-    }
-    if (targetPdfDoc.value && targetTextItems.value.length === 0) {
-      const items = await extractTextItemsFromPdf(targetPdfDoc.value);
-      targetTextItems.value = items;
-      if (targetViewerRef.value) {
-        await renderPdf(targetPdfDoc.value, targetViewerRef.value);
-      }
-    }
-    // 如果两个文件都已加载，计算差异
-    if (sourceTextItems.value.length > 0 && targetTextItems.value.length > 0) {
-      await computeDiff(sourceTextItems.value, targetTextItems.value);
-    }
-  }
-}
-
-const handleFile = async (e: Event, side: "source" | "target") => {
-  const input = e.target as HTMLInputElement;
-  const files = input.files;
-  if (!files || files.length === 0) return;
-
-  loading.value = true;
-  loadError.value = "";
-
-  try {
-    if (files.length >= 2) {
-      // 同时上传两个文件
-      const [buf1, buf2] = await Promise.all([
-        readFileAsArrayBuffer(files[0]),
-        readFileAsArrayBuffer(files[1]),
-      ]);
-      const [pdf1, pdf2] = await Promise.all([
-        pdfjsLib.getDocument({ data: buf1 }).promise,
-        pdfjsLib.getDocument({ data: buf2 }).promise,
-      ]);
-
-      sourcePdfDoc.value = markRaw(pdf1);
-      targetPdfDoc.value = markRaw(pdf2);
-      sourceFileName.value = files[0].name;
-      targetFileName.value = files[1].name;
-
-      await processAfterFileLoad();
-    } else {
-      // 上传单个文件
-      const buf = await readFileAsArrayBuffer(files[0]);
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-
-      if (side === "source") {
-        sourcePdfDoc.value = markRaw(pdf);
-        sourceFileName.value = files[0].name;
-      } else {
-        targetPdfDoc.value = markRaw(pdf);
-        targetFileName.value = files[0].name;
-      }
-
-      await processAfterFileLoad();
-    }
-  } catch (err) {
-    console.error("PDF load error:", err);
-    loadError.value = (err as Error).message || t("pdfLoadFailed");
-  } finally {
-    loading.value = false;
-    input.value = "";
-  }
-};
-
-const clearItems = () => {
-  sourcePdfDoc.value = null;
-  targetPdfDoc.value = null;
-  sourceFileName.value = "";
-  targetFileName.value = "";
-  loadError.value = "";
-  sourceTextItems.value = [];
-  targetTextItems.value = [];
-  diffBlocks.value = [];
-  diffHighlights.value = { source: [], target: [] };
-  activeBlockIdx.value = -1;
-  ocrStatus.value = "";
-  if (sourceViewerRef.value) sourceViewerRef.value.innerHTML = "";
-  if (targetViewerRef.value) targetViewerRef.value.innerHTML = "";
-};
-
-const handlePaste = async (e: ClipboardEvent) => {
-  const files = extractFilesFromClipboard(e, (file) => /\.pdf$/i.test(file.name));
-  if (files.length === 0) return;
-
-  loading.value = true;
-  loadError.value = "";
-  try {
-    if (files.length >= 2) {
-      const [buf1, buf2] = await Promise.all([
-        readFileAsArrayBuffer(files[0]),
-        readFileAsArrayBuffer(files[1]),
-      ]);
-      const [pdf1, pdf2] = await Promise.all([
-        pdfjsLib.getDocument({ data: buf1 }).promise,
-        pdfjsLib.getDocument({ data: buf2 }).promise,
-      ]);
-
-      sourcePdfDoc.value = markRaw(pdf1);
-      targetPdfDoc.value = markRaw(pdf2);
-      sourceFileName.value = files[0].name;
-      targetFileName.value = files[1].name;
-
-      await processAfterFileLoad();
-    } else {
-      const buf = await readFileAsArrayBuffer(files[0]);
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-
-      if (!sourcePdfDoc.value) {
-        sourcePdfDoc.value = markRaw(pdf);
-        sourceFileName.value = files[0].name;
-      } else {
-        targetPdfDoc.value = markRaw(pdf);
-        targetFileName.value = files[0].name;
-      }
-
-      await processAfterFileLoad();
-    }
-  } catch (err) {
-    loadError.value = (err as Error).message || t("pdfLoadFailed");
-  } finally {
-    loading.value = false;
-  }
-};
-
-// 导航到差异位置
-const scrollToBlock = async (idx: number) => {
-  activeBlockIdx.value = idx;
-  const block = diffBlocks.value[idx];
-  if (!block) return;
-
-  sourceViewerRef.value?.querySelectorAll('.pdf-highlight-active').forEach(el => {
-    el.classList.remove('pdf-highlight-active');
-  });
-  targetViewerRef.value?.querySelectorAll('.pdf-highlight-active').forEach(el => {
-    el.classList.remove('pdf-highlight-active');
-  });
-
-  if (block.sourcePage) {
-    const sourcePage = sourceViewerRef.value?.querySelector(`#page-${block.sourcePage}`);
-    sourcePage?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    if (block.sourceIndex !== undefined) {
-      const highlightEl = sourceViewerRef.value?.querySelector(`[data-index="${block.sourceIndex}"]`);
-      highlightEl?.classList.add('pdf-highlight-active');
-    }
-  }
-
-  if (block.targetPage) {
-    const targetPage = targetViewerRef.value?.querySelector(`#page-${block.targetPage}`);
-    targetPage?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    if (block.targetIndex !== undefined) {
-      const highlightEl = targetViewerRef.value?.querySelector(`[data-index="${block.targetIndex}"]`);
-      highlightEl?.classList.add('pdf-highlight-active');
-    }
-  }
-};
-
-const goToNextDiff = () => {
-  const indices = diffBlocks.value
-    .map((b, i) => (b.type !== "equal" ? i : -1))
-    .filter((i) => i >= 0);
-  const next = getNextIndex(indices, activeBlockIdx.value);
-  if (next === -1) return;
-  scrollToBlock(next);
-};
-
-const goToPrevDiff = () => {
-  const indices = diffBlocks.value
-    .map((b, i) => (b.type !== "equal" ? i : -1))
-    .filter((i) => i >= 0);
-  const prev = getPrevIndex(indices, activeBlockIdx.value);
-  if (prev === -1) return;
-  scrollToBlock(prev);
-};
 
 onMounted(() => {
-  window.addEventListener("paste", handlePaste);
-});
-
+  window.addEventListener("paste", handlePaste)
+})
 onUnmounted(() => {
-  window.removeEventListener("paste", handlePaste);
-  if (diffWorker) {
-    diffWorker.terminate();
-    diffWorker = null;
-  }
-});
+  window.removeEventListener("paste", handlePaste)
+})
 </script>
 
 <template>
@@ -859,7 +100,7 @@ onUnmounted(() => {
         <template v-if="bothLoaded">
           <div v-if="diffCount > 0" class="flex items-center gap-1.5">
             <ZTooltip :content="showHighlights ? t('hideHighlights') || '隐藏高亮' : t('showHighlights') || '显示高亮'">
-              <ZButton variant="ghost" size="sm" :active="showHighlights" @click="toggleHighlights"
+              <ZButton variant="ghost" size="sm" :active="showHighlights" @click="handleToggleHighlight"
                 class="!px-2 !h-6 text-xs">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" class="mr-1">
@@ -876,11 +117,11 @@ onUnmounted(() => {
             </ZTooltip>
             <div
               class="flex items-center gap-1.5 bg-[var(--color-surface)] rounded-md border border-[var(--color-border)] px-2 py-1">
-              <span class="text-xs font-medium text-[var(--color-cta)] cursor-pointer" @click="goToNextDiff">
+              <span class="text-xs font-medium text-[var(--color-cta)] cursor-pointer" @click="handleNext">
                 {{ t("pdfDiffCount", { n: diffCount }) }}
               </span>
-              <PrevNextButtons :prev-label="t('prevChange')" :next-label="t('nextChange')" @prev="goToPrevDiff"
-                @next="goToNextDiff" />
+              <PrevNextButtons :prev-label="t('prevChange')" :next-label="t('nextChange')" @prev="handlePrev"
+                @next="handleNext" />
             </div>
           </div>
           <span v-else class="text-xs text-[var(--color-secondary)]">
@@ -889,7 +130,7 @@ onUnmounted(() => {
         </template>
 
         <ZTooltip :content="t('clearItems')" v-if="bothLoaded">
-          <ZButton variant="ghost" size="icon-sm" @click="clearItems"
+          <ZButton variant="ghost" size="icon-sm" @click="handleClear"
             class="!w-6 !h-6 text-[var(--color-secondary)] hover:text-[var(--color-text)]">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2.5">
@@ -916,7 +157,7 @@ onUnmounted(() => {
     <div class="flex-1 overflow-hidden relative bg-[var(--color-surface)]">
       <!-- Dropzones -->
       <div v-if="!bothLoaded" class="h-full flex gap-4 p-5">
-        <FileDropzone side="source" :title="t('pdfSource')" :hint="t('uploadPdf')" :is-ready="!!sourcePdfDoc"
+        <FileDropzone side="source" :title="t('pdfSource')" :hint="t('uploadPdf')" :is-ready="!!sourceViewerRef"
           :fileName="sourceFileName" accept=".pdf" @change="handleFile($event, 'source')">
           <template #icon>
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -928,7 +169,7 @@ onUnmounted(() => {
             </svg>
           </template>
         </FileDropzone>
-        <FileDropzone side="target" :title="t('pdfTarget')" :hint="t('uploadPdf')" :is-ready="!!targetPdfDoc"
+        <FileDropzone side="target" :title="t('pdfTarget')" :hint="t('uploadPdf')" :is-ready="!!targetViewerRef"
           :fileName="targetFileName" accept=".pdf" @change="handleFile($event, 'target')">
           <template #icon>
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -973,7 +214,7 @@ onUnmounted(() => {
 
         <!-- Center: Diff Bar -->
         <DiffBar :title="t('pdfDiffShort') || t('diffResult')" :items="diffBlocks" :active-index="activeBlockIdx"
-          @item-click="scrollToBlock" />
+          @item-click="handleScroll" />
 
         <!-- Right: Target PDF Viewer -->
         <div ref="rightPanelRef" class="flex-1 overflow-auto custom-scrollbar pdf-panel">

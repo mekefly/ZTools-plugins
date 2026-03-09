@@ -1,188 +1,33 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import pixelmatch from "pixelmatch";
 import ZTooltip from "@/components/ui/base/ZTooltip.vue";
 import ZBadge from "@/components/ui/base/ZBadge.vue";
 import ZButton from "@/components/ui/base/ZButton.vue";
 import FileDropzone from "@/components/shared/FileDropzone.vue";
+import { useImageDiff } from "@/composables/useImageDiff";
 
 const { t } = useI18n();
-// 视图模式
-type ViewMode = "split" | "slider" | "blend" | "highlight";
-// 图片
-const sourceImage = ref<string | null>(null);
-const targetImage = ref<string | null>(null);
-// 当前视图模式
-const viewMode = ref<ViewMode>("split");
 
-const sliderPos = ref(50);
-const isDragging = ref(false);
-const isPanning = ref(false);
-const viewportRef = ref<HTMLElement | null>(null);
+const {
+  sourceImage,
+  targetImage,
+  viewMode,
+  sliderPos,
+  blendOpacity,
+  zoom,
+  diffOverlay,
+  isComputingDiff,
+  bothLoaded,
+  handleFileInput,
+  clearImages,
+  resetTransform,
+  startSliderDrag,
+  startPan,
+  handleWheel,
+  viewportRef,
+  imageTransform,
+} = useImageDiff()
 
-const blendOpacity = ref(0.5);
-
-// Zoom & Pan state
-const zoom = ref(1);
-const panX = ref(0);
-const panY = ref(0);
-const lastMousePos = ref({ x: 0, y: 0 });
-
-const bothLoaded = computed(() => !!sourceImage.value && !!targetImage.value);
-
-// ── Highlight Diff Computation ────────────────────────
-const diffOverlay = ref<string | null>(null);
-const isComputingDiff = ref(false);
-
-const loadImageObj = (src: string): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-};
-
-const computePixelDiff = async () => {
-  if (!sourceImage.value || !targetImage.value) return;
-  isComputingDiff.value = true;
-  try {
-    const imgSrc = await loadImageObj(sourceImage.value);
-    const imgTarget = await loadImageObj(targetImage.value);
-
-    const width = Math.max(imgSrc.width, imgTarget.width);
-    const height = Math.max(imgSrc.height, imgTarget.height);
-
-    const c1 = document.createElement("canvas");
-    c1.width = width;
-    c1.height = height;
-    const ctx1 = c1.getContext("2d")!;
-    ctx1.drawImage(imgSrc, 0, 0);
-    const data1 = ctx1.getImageData(0, 0, width, height);
-
-    const c2 = document.createElement("canvas");
-    c2.width = width;
-    c2.height = height;
-    const ctx2 = c2.getContext("2d")!;
-    ctx2.drawImage(imgTarget, 0, 0);
-    const data2 = ctx2.getImageData(0, 0, width, height);
-
-    const diffCanvas = document.createElement("canvas");
-    diffCanvas.width = width;
-    diffCanvas.height = height;
-    const diffCtx = diffCanvas.getContext("2d")!;
-    const diffData = diffCtx.createImageData(width, height);
-
-    pixelmatch(data1.data, data2.data, diffData.data, width, height, {
-      threshold: 0.1,
-      alpha: 0.5,
-      includeAA: true,
-      diffColor: [255, 0, 0],
-    });
-
-    diffCtx.putImageData(diffData, 0, 0);
-    diffOverlay.value = diffCanvas.toDataURL();
-  } catch (e) {
-    console.error("Failed to compute diff:", e);
-  } finally {
-    isComputingDiff.value = false;
-  }
-};
-
-watch([viewMode, sourceImage, targetImage], () => {
-  if (viewMode.value === "highlight" && bothLoaded.value) {
-    computePixelDiff();
-  }
-});
-
-// ── File loading ─────────────────────────────────────
-import { readFileAsDataURL } from "@/utils/file";
-
-const handleFileInput = async (e: Event, side: "source" | "target") => {
-  const input = e.target as HTMLInputElement;
-  const files = input.files;
-  if (!files || files.length === 0) return;
-
-  if (files.length >= 2) {
-    sourceImage.value = await readFileAsDataURL(files[0]);
-    targetImage.value = await readFileAsDataURL(files[1]);
-  } else {
-    const url = await readFileAsDataURL(files[0]);
-    if (side === "source") sourceImage.value = url;
-    else targetImage.value = url;
-  }
-  input.value = "";
-};
-
-const clearImages = () => {
-  sourceImage.value = null;
-  targetImage.value = null;
-  diffOverlay.value = null;
-  sliderPos.value = 50;
-  blendOpacity.value = 0.5;
-  viewMode.value = "split";
-  resetTransform();
-};
-
-const resetTransform = () => {
-  zoom.value = 1;
-  panX.value = 0;
-  panY.value = 0;
-};
-
-// ── Interaction ───────────────────────────────────────
-const startSliderDrag = (e: MouseEvent) => {
-  e.stopPropagation();
-  isDragging.value = true;
-};
-
-const startPan = (e: MouseEvent) => {
-  if (viewMode.value === "slider" && isDragging.value) return;
-  isPanning.value = true;
-  lastMousePos.value = { x: e.clientX, y: e.clientY };
-};
-
-const handleWheel = (e: WheelEvent) => {
-  e.preventDefault();
-  const delta = -e.deltaY;
-  const zoomSpeed = 0.001;
-  const newZoom = Math.max(0.1, Math.min(zoom.value + delta * zoomSpeed, 10));
-  zoom.value = newZoom;
-};
-
-const onMouseMove = (e: MouseEvent) => {
-  if (isDragging.value && viewMode.value === "slider" && viewportRef.value) {
-    const rect = viewportRef.value.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    sliderPos.value = (x / rect.width) * 100;
-  } else if (isPanning.value) {
-    const dx = e.clientX - lastMousePos.value.x;
-    const dy = e.clientY - lastMousePos.value.y;
-    panX.value += dx;
-    panY.value += dy;
-    lastMousePos.value = { x: e.clientX, y: e.clientY };
-  }
-};
-
-const stopDrag = () => {
-  isDragging.value = false;
-  isPanning.value = false;
-};
-
-const imageTransform = computed(() => ({
-  transform: `translate(${panX.value}px, ${panY.value}px) scale(${zoom.value})`,
-  transition: isPanning.value ? "none" : "transform 0.1s ease-out",
-}));
-
-onMounted(() => {
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("mouseup", stopDrag);
-});
-onUnmounted(() => {
-  window.removeEventListener("mousemove", onMouseMove);
-  window.removeEventListener("mouseup", stopDrag);
-});
 </script>
 
 <template>
@@ -320,7 +165,9 @@ onUnmounted(() => {
         <!-- Viewport -->
         <div
           class="flex-1 min-h-0 bg-checker relative flex w-full h-full overflow-hidden cursor-grab active:cursor-grabbing"
-          ref="viewportRef" @wheel="handleWheel" @mousedown.prevent="startPan">
+          ref="viewportRef"
+          @wheel="handleWheel"
+          @mousedown="startPan">
           <!-- SPLIT MODE -->
           <template v-if="viewMode === 'split'">
             <div
@@ -376,7 +223,8 @@ onUnmounted(() => {
 
             <!-- Handle -->
             <div
-              class="absolute top-0 bottom-0 w-[2px] bg-[var(--color-cta)] cursor-ew-resize z-20 flex flex-col items-center justify-center transform -translate-x-1/2"
+              class="slider-handle absolute top-0 bottom-0 w-[2px] bg-[var(--color-cta)] cursor-ew-resize z-30 flex flex-col items-center justify-center transform -translate-x-1/2"
+              
               :style="{ left: `${sliderPos}%` }" @mousedown.prevent="startSliderDrag">
               <div
                 class="cursor-ew-resize w-10 h-10 rounded-full bg-[var(--color-cta)] border-2 border-[var(--color-background)] shadow-2xl flex items-center justify-center pointer-events-none text-white transition-transform hover:scale-110">

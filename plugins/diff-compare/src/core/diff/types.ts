@@ -30,6 +30,8 @@ export interface DiffResult<T> {
   source?: T
   /** 目标数据 */
   target?: T
+  /** 额外元数据 */
+  metadata?: Record<string, any>
 }
 
 /**

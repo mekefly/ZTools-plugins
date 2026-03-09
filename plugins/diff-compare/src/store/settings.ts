@@ -1,11 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { shallowRef } from 'vue'
 
-/**
- * Global settings store for the application using Pinia.
- */
 export const useSettingsStore = defineStore('settings', () => {
-    const autoFormat = ref(true)
+    const autoFormat = shallowRef(true)
 
     const setAutoFormat = (value: boolean) => {
         autoFormat.value = value

@@ -1,38 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import DiffWorkbench from '@/components/layout/DiffWorkbench.vue'
 import TextDiffView from '@/components/diff-views/TextDiffView.vue'
 import ImageDiffView from '@/components/diff-views/ImageDiffView.vue'
 import ExcelDiffView from '@/components/diff-views/ExcelDiffView.vue'
 import WordDiffView from '@/components/diff-views/WordDiffView.vue'
 import PdfDiffView from '@/components/diff-views/PdfDiffView.vue'
+import { usePluginEvents } from '@/composables/usePluginEvents'
 
-const currentMode = ref('text')
-
-onMounted(() => {
-  if (window.ztools) {
-    window.ztools.onPluginEnter((action) => {
-      // Handle any specific enter actions
-      const code = action.code
-      if (code === 'diff-text') {
-        currentMode.value = 'text'
-      } else if (code === 'diff-image') {
-        currentMode.value = 'image'
-      } else if (code === 'diff-excel') {
-        currentMode.value = 'excel'
-      } else if (code === 'diff-word') {
-        currentMode.value = 'word'
-      } else if (code === 'diff-pdf') {
-        currentMode.value = 'pdf'
-      } else {
-        currentMode.value = 'text'
-      }
-    })
-    window.ztools.onPluginOut(() => {
-      // Handle plugin exit
-    })
-  }
-})
+const { currentMode } = usePluginEvents()
 </script>
 
 <template>
