@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import ZSelect from "@/components/ui/base/ZSelect.vue";
-import ZTooltip from "@/components/ui/base/ZTooltip.vue";
-import ZButton from "@/components/ui/base/ZButton.vue";
-import ZBadge from "@/components/ui/base/ZBadge.vue";
+import ZSelect from "@/components/ui/ZSelect.vue";
+import ZTooltip from "@/components/ui/ZTooltip.vue";
+import ZButton from "@/components/ui/ZButton.vue";
+import ZBadge from "@/components/ui/ZBadge.vue";
 import ZIcon from "@/components/ui/ZIcon.vue";
 import DiffBar from "@/components/shared/DiffBar.vue";
 import { detectLanguage } from "@/utils/formatter";
-import { useTextDiff } from "@/composables/useTextDiff";
-import { useAutoFormat } from "@/composables/useAutoFormat";
-import { useSyntaxHighlight, langOptions } from "@/composables/useSyntaxHighlight";
+import { useTextDiff } from "@/composables/useText";
+import { useAutoFormat } from "@/composables/useText";
+import { useSyntaxHighlight, langOptions } from "@/composables/useText";
 import 'highlight.js/styles/dark.min.css'
 
 const { t } = useI18n();

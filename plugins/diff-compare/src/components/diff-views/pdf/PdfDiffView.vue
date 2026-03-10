@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { shallowRef, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import ZBadge from "@/components/ui/base/ZBadge.vue";
-import ZButton from "@/components/ui/base/ZButton.vue";
-import ZTooltip from "@/components/ui/base/ZTooltip.vue";
+import ZBadge from "@/components/ui/ZBadge.vue";
+import ZButton from "@/components/ui/ZButton.vue";
+import ZTooltip from "@/components/ui/ZTooltip.vue";
 import ZIcon from "@/components/ui/ZIcon.vue";
 import FileDropzone from "@/components/shared/FileDropzone.vue";
 import DiffBar from "@/components/shared/DiffBar.vue";
 import DiffLegend from "@/components/shared/DiffLegend.vue";
 import PrevNextButtons from "@/components/shared/PrevNextButtons.vue";
-import { usePdfDiff } from "@/composables/usePdfDiff";
+import { usePdfDiff } from "@/composables/usePdf";
 
 const { t } = useI18n();
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SettingsPanel from '@/components/ui/SettingsPanel.vue'
-import ZTooltip from '@/components/ui/base/ZTooltip.vue'
-import ZButton from '@/components/ui/base/ZButton.vue'
+import SettingsPanel from '@/components/layout/SettingsPanel.vue'
+import ZTooltip from '@/components/ui/ZTooltip.vue'
+import ZButton from '@/components/ui/ZButton.vue'
 import ZIcon from '@/components/ui/ZIcon.vue'
 import { useTheme } from '@/composables/useTheme'
 

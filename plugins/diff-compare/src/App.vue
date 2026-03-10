@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import DiffWorkbench from '@/components/layout/DiffWorkbench.vue'
-import TextDiffView from '@/components/diff-views/TextDiffView.vue'
-import ImageDiffView from '@/components/diff-views/ImageDiffView.vue'
-import ExcelDiffView from '@/components/diff-views/ExcelDiffView.vue'
-import WordDiffView from '@/components/diff-views/WordDiffView.vue'
-import PdfDiffView from '@/components/diff-views/PdfDiffView.vue'
+import TextDiffView from '@/components/diff-views/text/TextDiffView.vue'
+import ImageDiffView from '@/components/diff-views/image/ImageDiffView.vue'
+import ExcelDiffView from '@/components/diff-views/excel/ExcelDiffView.vue'
+import WordDiffView from '@/components/diff-views/word/WordDiffView.vue'
+import PdfDiffView from '@/components/diff-views/pdf/PdfDiffView.vue'
 import { usePluginEvents } from '@/composables/usePluginEvents'
 
 const { currentMode } = usePluginEvents()

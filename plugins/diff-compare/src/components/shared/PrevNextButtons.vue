@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import ZTooltip from '@/components/ui/base/ZTooltip.vue'
-import ZButton from '@/components/ui/base/ZButton.vue'
+import ZTooltip from '@/components/ui/ZTooltip.vue'
+import ZButton from '@/components/ui/ZButton.vue'
 import ZIcon from '@/components/ui/ZIcon.vue'
 
 defineProps<{

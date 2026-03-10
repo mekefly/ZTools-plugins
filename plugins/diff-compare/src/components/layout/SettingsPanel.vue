@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ZSelect from './base/ZSelect.vue'
+import ZSelect from '@/components/ui/ZSelect.vue'
 import { useSettingsStore } from '@/store/settings'
 import { storeToRefs } from 'pinia'
-import ZIcon from './ZIcon.vue'
+import ZIcon from '@/components/ui/ZIcon.vue'
 
 const { locale, t } = useI18n()
 const settingsStore = useSettingsStore()

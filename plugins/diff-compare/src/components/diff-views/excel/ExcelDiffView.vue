@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ZBadge from '@/components/ui/base/ZBadge.vue'
-import ZButton from '@/components/ui/base/ZButton.vue'
-import ZTooltip from '@/components/ui/base/ZTooltip.vue'
-import ZSelect from '@/components/ui/base/ZSelect.vue'
+import ZBadge from '@/components/ui/ZBadge.vue'
+import ZButton from '@/components/ui/ZButton.vue'
+import ZTooltip from '@/components/ui/ZTooltip.vue'
+import ZSelect from '@/components/ui/ZSelect.vue'
 import ZIcon from '@/components/ui/ZIcon.vue'
 import FileDropzone from '@/components/shared/FileDropzone.vue'
 import DiffLegend from '@/components/shared/DiffLegend.vue'
-import { useExcelDiff } from '@/composables/useExcelDiff'
+import { useExcelDiff } from '@/composables/useExcel'
 import { useScrollSync } from '@/composables/useScrollSync'
 
 const { t } = useI18n()
