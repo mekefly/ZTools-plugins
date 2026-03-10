@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import ZTooltip from "@/components/ui/base/ZTooltip.vue";
-import ZBadge from "@/components/ui/base/ZBadge.vue";
-import ZButton from "@/components/ui/base/ZButton.vue";
+import ZTooltip from "@/components/ui/ZTooltip.vue";
+import ZBadge from "@/components/ui/ZBadge.vue";
+import ZButton from "@/components/ui/ZButton.vue";
 import ZIcon from "@/components/ui/ZIcon.vue";
 import FileDropzone from "@/components/shared/FileDropzone.vue";
-import { useImageDiff } from "@/composables/useImageDiff";
+import { useImageDiff } from "@/composables/useImage";
 
 const { t } = useI18n();
 

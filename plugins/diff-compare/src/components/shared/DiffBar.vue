@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import ZTooltip from '@/components/ui/base/ZTooltip.vue'
+import ZTooltip from '@/components/ui/ZTooltip.vue'
 import { useI18n } from 'vue-i18n'
 import ZIcon from '@/components/ui/ZIcon.vue'
 
