@@ -8,6 +8,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ZSelect from '@/components/ui/ZSelect.vue'
 import ZIcon from '@/components/ui/ZIcon.vue'
+import UsageGuideItem from '@/components/shared/UsageGuideItem.vue'
 import { useAutoFormatSettings } from '@/composables/useAutoFormat'
 
 const { locale, t } = useI18n()
@@ -51,10 +52,10 @@ const formatOptions = computed(() => [
                     <div class="sp-header-title">
                         <!-- Settings gear icon -->
                         <ZIcon name="settings" :size="16" class="sp-header-icon" />
-                        <span>{{ locale === 'zh' ? '设置' : (locale === 'ja' ? '設定' : 'Settings') }}</span>
+                        <span>{{ t('settingsTitle') }}</span>
                     </div>
                     <button class="sp-close" @click="emit('close')"
-                        :title="locale === 'zh' ? '关闭' : (locale === 'ja' ? '閉じる' : 'Close')">
+                        :title="t('settingsClose')">
                         <ZIcon name="x" :size="15" />
                     </button>
                 </header>
@@ -65,7 +66,7 @@ const formatOptions = computed(() => [
                     <!-- Language section -->
                     <section class="sp-section">
                         <p class="sp-section-label">
-                            {{ locale === 'zh' ? '显示语言' : (locale === 'ja' ? '表示言語' : 'Display Language') }}
+                            {{ t('displayLanguage') }}
                         </p>
                         <ZSelect v-model="locale" :options="langOptions" />
                     </section>
@@ -86,95 +87,22 @@ const formatOptions = computed(() => [
                             {{ t('usageGuide') }}
                         </p>
                         <div class="sp-guide-list">
-
-                            <!-- Text Compare -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--blue">
-                                    <ZIcon name="text" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageTextTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageTextDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Image Compare -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--purple">
-                                    <ZIcon name="image" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageImageTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageImageDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Excel Compare -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--green">
-                                    <ZIcon name="excel" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageExcelTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageExcelDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Word Compare -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--blue">
-                                    <ZIcon name="word" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageWordTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageWordDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- PDF Compare -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--red">
-                                    <ZIcon name="pdf" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usagePdfTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usagePdfDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Theme -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--amber">
-                                    <ZIcon name="moon" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageThemeTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageThemeDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Language -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--green">
-                                    <ZIcon name="globe" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageLanguageTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageLanguageDesc') }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Auto Format -->
-                            <div class="sp-guide-item">
-                                <div class="sp-guide-icon-wrap sp-guide-icon-wrap--purple">
-                                    <ZIcon name="edit" :size="15" />
-                                </div>
-                                <div class="sp-guide-text">
-                                    <p class="sp-guide-title">{{ t('usageAutoFormatTitle') }}</p>
-                                    <p class="sp-guide-desc">{{ t('usageAutoFormatDesc') }}</p>
-                                </div>
-                            </div>
-
+                            <UsageGuideItem icon="text" type="blue" :title="t('usageTextTitle')"
+                                :desc="t('usageTextDesc')" />
+                            <UsageGuideItem icon="image" type="purple" :title="t('usageImageTitle')"
+                                :desc="t('usageImageDesc')" />
+                            <UsageGuideItem icon="excel" type="green" :title="t('usageExcelTitle')"
+                                :desc="t('usageExcelDesc')" />
+                            <UsageGuideItem icon="word" type="blue" :title="t('usageWordTitle')"
+                                :desc="t('usageWordDesc')" />
+                            <UsageGuideItem icon="pdf" type="red" :title="t('usagePdfTitle')"
+                                :desc="t('usagePdfDesc')" />
+                            <UsageGuideItem icon="moon" type="amber" :title="t('usageThemeTitle')"
+                                :desc="t('usageThemeDesc')" />
+                            <UsageGuideItem icon="globe" type="green" :title="t('usageLanguageTitle')"
+                                :desc="t('usageLanguageDesc')" />
+                            <UsageGuideItem icon="edit" type="purple" :title="t('usageAutoFormatTitle')"
+                                :desc="t('usageAutoFormatDesc')" />
                         </div>
                     </section>
                 </div>
@@ -285,6 +213,13 @@ const formatOptions = computed(() => [
     gap: 10px;
 }
 
+/* ── Guide List ───────────────────────────────────────── */
+.sp-guide-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 .sp-section-label {
     font-size: 11px;
     font-weight: 600;
@@ -297,83 +232,6 @@ const formatOptions = computed(() => [
 .sp-divider {
     height: 1px;
     background: var(--color-border);
-}
-
-/* ── Guide List ───────────────────────────────────────── */
-.sp-guide-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.sp-guide-item {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 10px 12px;
-    border-radius: 10px;
-    transition: background 150ms ease;
-
-    &:hover {
-        background: color-mix(in srgb, var(--color-border) 50%, transparent);
-    }
-}
-
-/* ── Icon wrap (colored badge) ────────────────────────── */
-.sp-guide-icon-wrap {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 1px;
-
-    &--blue {
-        background: rgba(59, 130, 246, 0.15);
-        color: #3b82f6;
-    }
-
-    &--purple {
-        background: rgba(139, 92, 246, 0.15);
-        color: #8b5cf6;
-    }
-
-    &--amber {
-        background: rgba(245, 158, 11, 0.15);
-        color: #f59e0b;
-    }
-
-    &--green {
-        background: rgba(16, 185, 129, 0.15);
-        color: #10b981;
-    }
-
-    &--red {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
-    }
-}
-
-/* ── Guide Text ───────────────────────────────────────── */
-.sp-guide-text {
-    flex: 1;
-}
-
-.sp-guide-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 3px;
-    line-height: 1.4;
-}
-
-.sp-guide-desc {
-    font-size: 12px;
-    color: var(--color-secondary);
-    margin: 0;
-    line-height: 1.55;
 }
 
 /* ── Footer ───────────────────────────────────────────── */

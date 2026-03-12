@@ -120,6 +120,11 @@ const en = {
   usageLanguageDesc: 'Use the selector below to switch the display language between Chinese, English and Japanese.',
   usageAutoFormatTitle: 'Auto Format',
   usageAutoFormatDesc: 'When enabled, automatically formats input text with immediate or delayed mode options.',
+
+  // Settings Panel
+  settingsTitle: 'Settings',
+  settingsClose: 'Close',
+  displayLanguage: 'Display Language',
 }
 
 export default en

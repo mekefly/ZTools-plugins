@@ -120,6 +120,11 @@ const ja = {
   usageLanguageDesc: '下のセレクターを使用して、表示言語を中国語、英語、日本語から選択できます。',
   usageAutoFormatTitle: '自動フォーマット',
   usageAutoFormatDesc: '有効にすると、テキスト入力を自動的に整理し、即時または遅延モードでフォーマットします。',
+
+  // Settings Panel
+  settingsTitle: '設定',
+  settingsClose: '閉じる',
+  displayLanguage: '表示言語',
 }
 
 export default ja

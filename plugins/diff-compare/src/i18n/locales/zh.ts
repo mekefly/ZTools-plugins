@@ -120,6 +120,11 @@ const zh = {
   usageLanguageDesc: '在下方选择框中切换显示语言，当前支持中文、英文和日文。',
   usageAutoFormatTitle: '自动格式化',
   usageAutoFormatDesc: '开启后输入文本自动整理格式，支持立即生效或延迟生效模式。',
+
+  // Settings Panel
+  settingsTitle: '设置',
+  settingsClose: '关闭',
+  displayLanguage: '显示语言',
 }
 
 export default zh
