@@ -49,4 +49,10 @@ coverage
 *.tmp
 *.temp
 
-dist/
+# ai
+.agent/
+.vscode/
+.opencode/
+
+# pnpm
+pnpm-lock.yaml

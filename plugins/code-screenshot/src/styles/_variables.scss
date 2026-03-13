@@ -1,4 +1,4 @@
-// Colors
+// Colors - Dark Theme (default)
 $color-bg: #000;
 $color-text: #fff;
 $color-text-muted: #a1a1aa;
@@ -25,6 +25,47 @@ $color-toolbar-border: rgba(255, 255, 255, 0.05);
 // Modal
 $color-modal-bg: rgba(24, 24, 27, 0.85);
 $color-modal-overlay: rgba(0, 0, 0, 0.6);
+
+// Light Theme Colors
+$color-bg-light: #fafafa;
+$color-text-light-theme: #18181b;
+$color-text-muted-light: #71717a;
+$color-text-muted-darker-light: #a1a1aa;
+$color-text-light-theme-light: #52525b;
+$color-text-lighter-light: #3f3f46;
+
+// Light Theme Window colors
+$color-window-bg-light-mode: rgba(255, 255, 255, 0.9);
+$color-window-border-light-mode: rgba(0, 0, 0, 0.08);
+
+// Light Theme Toolbar
+$color-toolbar-bg-light: rgba(255, 255, 255, 0.8);
+$color-toolbar-border-light: rgba(0, 0, 0, 0.06);
+
+// Light Theme Modal
+$color-modal-bg-light: rgba(255, 255, 255, 0.98);
+$color-modal-overlay-light: rgba(0, 0, 0, 0.5);
+
+// Light Theme Button
+$color-btn-bg-light: #f4f4f5;
+$color-btn-border-light: #e4e4e7;
+
+// Light Theme Toggle
+$color-toggle-bg-light: #e4e4e7;
+$color-toggle-knob-light: #fff;
+
+// Light Theme Padding Group
+$color-padding-group-bg-light: #f4f4f5;
+$color-padding-group-border-light: #e4e4e7;
+$color-padding-btn-active-light: #e0e7ff;
+$color-padding-btn-text-light: #3f3f46;
+$color-padding-btn-active-text-light: #4f46e5;
+
+// Light Theme Divider
+$color-divider-light: #e4e4e7;
+
+// Light Theme Dropdown
+$color-dropdown-hover-light: #f4f4f5;
 
 // Font families
 $font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -83,6 +124,7 @@ $z-tooltip: 700;
 
 // Export CSS custom properties for global use
 :root {
+  // Dark theme (default)
   --color-bg: #{$color-bg};
   --color-text: #{$color-text};
   --color-text-muted: #{$color-text-muted};
@@ -92,11 +134,39 @@ $z-tooltip: 700;
   --color-primary: #{$color-primary};
   --color-accent-blue: #{$color-accent-blue};
   --color-accent-purple: #{$color-accent-purple};
+  --color-window-bg: #{$color-window-bg-dark};
   --color-window-bg-dark: #{$color-window-bg-dark};
   --color-window-bg-light: #{$color-window-bg-light};
+  --color-window-border: #{$color-window-border-dark};
   --color-toolbar-bg: #{$color-toolbar-bg};
+  --color-toolbar-border: #{$color-toolbar-border};
   --color-modal-bg: #{$color-modal-bg};
   --color-modal-overlay: #{$color-modal-overlay};
+  --color-btn-bg: #3b1b1f;
+  --color-btn-border: rgba(255, 60, 60, 0.2);
+  --color-btn-hover: #4c2227;
+  --color-dropdown-bg: rgba(20, 20, 22, 0.97);
+  --color-dropdown-border: rgba(255, 255, 255, 0.1);
+  --shadow-glow-primary: 0 0 10px rgba(251, 113, 133, 0.3);
+
+  // Dark theme specific
+  --color-toggle-bg: #3f3f46;
+  --color-toggle-knob: #fff;
+  --color-toggle-border: rgba(255, 255, 255, 0.1);
+  --color-toggle-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  --color-toggle-knob-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.2);
+  --color-switch-active: #38bdf8;
+  --color-switch-active-border: #38bdf8;
+  --color-padding-group-bg: rgba(255, 255, 255, 0.02);
+  --color-padding-group-border: rgba(255, 255, 255, 0.05);
+  --color-padding-btn-active: rgba(255, 255, 255, 0.1);
+  --color-padding-btn-text: #a1a1aa;
+  --color-padding-btn-active-text: #fff;
+  --color-divider: rgba(255, 255, 255, 0.06);
+  --color-dropdown-hover: rgba(255, 255, 255, 0.05);
+  --color-section-divider: rgba(255, 255, 255, 0.08);
+
+  // Font families
   --font-sans: #{$font-sans};
   --font-mono: #{$font-mono};
   --font-size-xs: #{$font-size-xs};
@@ -138,4 +208,45 @@ $z-tooltip: 700;
   --z-modal: #{$z-modal};
   --z-popover: #{$z-popover};
   --z-tooltip: #{$z-tooltip};
+}
+
+// Light theme
+:root.light-theme {
+  --color-bg: #{$color-bg-light};
+  --color-text: #{$color-text-light-theme};
+  --color-text-muted: #{$color-text-muted-light};
+  --color-text-muted-darker: #{$color-text-muted-darker-light};
+  --color-text-light: #{$color-text-light-theme-light};
+  --color-text-lighter: #{$color-text-lighter-light};
+  --color-window-bg: #{$color-window-bg-light-mode};
+  --color-window-border: #{$color-window-border-light-mode};
+  --color-toolbar-bg: #{$color-toolbar-bg-light};
+  --color-toolbar-border: #{$color-toolbar-border-light};
+  --color-modal-bg: #{$color-modal-bg-light};
+  --color-modal-overlay: #{$color-modal-overlay-light};
+  --color-btn-bg: #{$color-btn-bg-light};
+  --color-btn-border: #{$color-btn-border-light};
+  --color-btn-hover: #e4e4e7;
+  --color-dropdown-bg: rgba(255, 255, 255, 0.98);
+  --color-dropdown-border: rgba(0, 0, 0, 0.08);
+  --shadow-glow-primary: 0 0 10px rgba(251, 113, 133, 0.15);
+  --shadow-xl: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-2xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+  
+  // Light theme specific
+  --color-toggle-bg: #e4e4e7;
+  --color-toggle-knob: #fff;
+  --color-toggle-border: rgba(0, 0, 0, 0.1);
+  --color-toggle-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+  --color-toggle-knob-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.05);
+  --color-switch-active: #0ea5e9;
+  --color-switch-active-border: #0ea5e9;
+  --color-padding-group-bg: #{$color-padding-group-bg-light};
+  --color-padding-group-border: #{$color-padding-group-border-light};
+  --color-padding-btn-active: #{$color-padding-btn-active-light};
+  --color-padding-btn-text: #{$color-padding-btn-text-light};
+  --color-padding-btn-active-text: #{$color-padding-btn-active-text-light};
+  --color-divider: #{$color-divider-light};
+  --color-dropdown-hover: #{$color-dropdown-hover-light};
+  --color-section-divider: #{$color-divider-light};
 }

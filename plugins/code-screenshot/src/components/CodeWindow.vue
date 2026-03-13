@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { state, BG_GRADIENTS } from '../store'
-import { useShiki } from '../composables/useShiki'
+import { state, BG_GRADIENTS } from '@/store'
+import { useShiki } from '@/composables/useShiki'
 
 const { isLoaded, highlightedHtml } = useShiki()
 
@@ -20,18 +20,14 @@ const startDrag = (e: MouseEvent, direction: 'left' | 'right') => {
   isDragging.value = true
 
   const startX = e.clientX
-  // Get current exact width of the window
   const windowEl = document.querySelector('.mac-window') as HTMLElement
   if (!windowEl) return
 
   const startWidth = windowEl.getBoundingClientRect().width
 
   const onMouseMove = (moveEvent: MouseEvent) => {
-    // Because the window is centered, dragging one side means the total width 
-    // changes by twice the delta to maintain centering.
     const delta = moveEvent.clientX - startX
-    const multiplier = direction === 'right' ? 2 : -2;
-    // Limit min width to 400
+    const multiplier = direction === 'right' ? 2 : -2
     const newWidth = Math.max(400, startWidth + delta * multiplier)
     customWidth.value = newWidth
   }
@@ -51,15 +47,10 @@ const autoWidth = () => {
 }
 
 // Ensure textarea never scrolls internally to prevent visual desync.
-// The parent .code-container handles all the actual scrolling.
 const lockInternalScroll = (e: Event) => {
-  const target = e.target as HTMLTextAreaElement;
-  if (target.scrollTop > 0) {
-    target.scrollTop = 0;
-  }
-  if (target.scrollLeft > 0) {
-    target.scrollLeft = 0;
-  }
+  const target = e.target as HTMLTextAreaElement
+  if (target.scrollTop > 0) target.scrollTop = 0
+  if (target.scrollLeft > 0) target.scrollLeft = 0
 }
 </script>
 
@@ -76,6 +67,7 @@ const lockInternalScroll = (e: Event) => {
         <!-- The Window Layer -->
         <div class="mac-window" :style="{ width: customWidth === 'auto' ? '100%' : `${customWidth}px` }"
           :class="{ 'theme-dark': state.darkMode, 'theme-light': !state.darkMode }">
+
           <!-- Window Frame -->
           <div class="window-header">
             <div class="mac-btns">
@@ -110,6 +102,8 @@ const lockInternalScroll = (e: Event) => {
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
+// ── Wrapper ──────────────────────────────────────────────────────────────────
+
 .window-wrapper {
   display: flex;
   flex-direction: column;
@@ -126,16 +120,20 @@ const lockInternalScroll = (e: Event) => {
   justify-content: center;
 }
 
+// ── Export Target (the screenshot canvas) ────────────────────────────────────
+
 .export-target {
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: all $transition-slow;
+  transition: all var(--transition-slow);
   min-width: 400px;
   max-width: 100%;
   border-radius: 8px;
 }
+
+// ── Resize Handles ───────────────────────────────────────────────────────────
 
 .resize-handle {
   position: absolute;
@@ -143,11 +141,18 @@ const lockInternalScroll = (e: Event) => {
   transform: translateY(-50%);
   width: 6px;
   height: 6px;
-  background-color: $color-text;
-  border-radius: $radius-full;
+  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-full);
   cursor: ew-resize;
   z-index: 10;
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.25);
+  transition: all var(--transition-base);
+
+  &:hover {
+    background-color: var(--color-accent-blue);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2), 0 0 8px rgba(56, 189, 248, 0.4);
+    transform: translateY(-50%) scale(1.4);
+  }
 
   &.left-handle {
     left: -20px;
@@ -158,54 +163,82 @@ const lockInternalScroll = (e: Event) => {
   }
 }
 
+// ── Mac Window Frame ─────────────────────────────────────────────────────────
+
 .mac-window {
   width: 100%;
-  border-radius: $radius-xl;
+  border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: $shadow-2xl, inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  background: $color-window-bg-dark;
+  background: var(--color-window-bg);
   backdrop-filter: blur(20px);
-  border: 1px solid $color-window-border-dark;
+  border: 1px solid var(--color-window-border);
   display: flex;
   flex-direction: column;
-  transition: all $transition-slow;
+  transition: all var(--transition-slow);
+
+  // Dark themed window: rich shadow + inner top highlight
+  box-shadow:
+    0 30px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 
   &.theme-light {
-    background: $color-window-bg-light;
-    border: 1px solid $color-window-border-light;
-    box-shadow: $shadow-xl;
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow:
+      0 20px 40px rgba(0, 0, 0, 0.12),
+      0 0 0 1px rgba(255, 255, 255, 0.8) inset;
   }
 }
+
+// ── Window Header (Traffic lights + Filename) ────────────────────────────────
 
 .window-header {
   display: flex;
   align-items: center;
-  padding: $spacing-lg;
+  padding: var(--spacing-lg);
   position: relative;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  .theme-light & {
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+  }
 }
 
 .mac-btns {
   display: flex;
-  gap: $spacing-sm;
+  gap: var(--spacing-sm);
   position: absolute;
-  left: $spacing-lg;
+  left: var(--spacing-lg);
+}
 
-  .mac-btn {
-    width: 12px;
-    height: 12px;
-    border-radius: $radius-full;
+.mac-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  transition: filter var(--transition-base);
 
-    &.close {
-      background: #ff5f56;
-    }
+  &.close {
+    background: #ff5f56;
+  }
 
-    &.minimize {
-      background: #ffbd2e;
-    }
+  &.minimize {
+    background: #ffbd2e;
+  }
 
-    &.maximize {
-      background: #27c93f;
-    }
+  &.maximize {
+    background: #27c93f;
+  }
+
+  .mac-window:hover &.close {
+    filter: brightness(1.1);
+  }
+
+  .mac-window:hover &.minimize {
+    filter: brightness(1.1);
+  }
+
+  .mac-window:hover &.maximize {
+    filter: brightness(1.1);
   }
 }
 
@@ -214,22 +247,29 @@ const lockInternalScroll = (e: Event) => {
   text-align: center;
   background: transparent;
   border: none;
-  font-family: $font-sans;
-  font-size: $font-size-base;
-  color: $color-text-muted;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  color: var(--color-text-muted);
   outline: none;
   font-weight: 500;
   letter-spacing: 0.3px;
+  transition: color var(--transition-base);
+
+  &:focus {
+    color: var(--color-text);
+  }
 
   .theme-light & {
     color: #52525b;
   }
 }
 
+// ── Code Container (CSS Grid for perfect overlay) ────────────────────────────
+
 .code-container {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  padding: 0 $spacing-xl calc(#{$spacing-xl} + 4px) $spacing-xl;
+  padding: 0 var(--spacing-xl) calc(var(--spacing-xl) + 4px) var(--spacing-xl);
   flex-grow: 1;
 }
 
@@ -248,7 +288,7 @@ const lockInternalScroll = (e: Event) => {
   border: none !important;
   background: transparent !important;
   color: transparent;
-  caret-color: $color-text;
+  caret-color: var(--color-text);
   white-space: pre-wrap;
   word-wrap: break-word;
   word-break: break-all;
@@ -275,6 +315,8 @@ const lockInternalScroll = (e: Event) => {
   overflow: hidden;
 }
 
+// ── Shiki overrides (force inherit layout from grid parent) ──────────────────
+
 :deep(pre) {
   margin: 0 !important;
   padding: 0 !important;
@@ -298,61 +340,5 @@ const lockInternalScroll = (e: Event) => {
   line-height: inherit !important;
   letter-spacing: inherit !important;
   word-spacing: inherit !important;
-}
-
-.toolbar-bottom-tips {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-md;
-  margin-top: $spacing-3xl;
-  color: $color-text-muted-darker;
-  font-size: $font-size-sm;
-  cursor: pointer;
-
-  .close-badge {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: $radius-full;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: $color-text-muted;
-    transition: all $transition-base;
-  }
-
-  &:hover {
-    .close-badge {
-      background: rgba(255, 255, 255, 0.2);
-      color: $color-text;
-    }
-
-    span {
-      color: $color-text-muted;
-    }
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
-}
-
-.bottom-tips-container {
-  height: 48px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity $transition-slow, transform $transition-bounce;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 </style>

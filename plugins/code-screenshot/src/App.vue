@@ -1,17 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { toPng, toSvg } from 'html-to-image'
-import CodeWindow from './components/CodeWindow.vue'
-import Toolbar from './components/Toolbar.vue'
-import { Info, ChevronDown, Download, X, FileCode2, ImageDown, FileType2, Clipboard, Check } from 'lucide-vue-next'
-import { state, SUPPORTED_LANGUAGES } from './store'
-import CsButton from './components/CsButton.vue'
+import CodeWindow from '@/components/CodeWindow.vue'
+import Toolbar from '@/components/Toolbar.vue'
+import { Info, ChevronDown, Download, FileCode2, ImageDown, FileType2, Clipboard, Check } from 'lucide-vue-next'
+import { state, SUPPORTED_LANGUAGES, LANGUAGE_ALIASES, detectLanguage } from '@/store'
+import CsButton from '@/libs/components/CsButton.vue'
+import AboutModal from '@/components/AboutModal.vue'
+import CsToastProvider from '@/libs/components/CsToastProvider.vue'
+import { useToast } from '@/libs/toast'
 
+const toast = useToast()
 const showAbout = ref(false)
 const isDraggingFile = ref(false)
 const showExportMenu = ref(false)
 const copyDone = ref(false)
 const exportMenuRef = ref<HTMLElement | null>(null)
+
+watch(() => state.darkMode, (isDark) => {
+  if (isDark) {
+    document.documentElement.classList.remove('light-theme')
+  } else {
+    document.documentElement.classList.add('light-theme')
+  }
+}, { immediate: true })
 
 const handleDragOver = (e: DragEvent) => {
   e.preventDefault()
@@ -42,33 +54,76 @@ const handleDrop = async (e: DragEvent) => {
 
     // Attempt language detection from extension
     const extMatch = file.name.match(/\.([^.]+)$/)
+    let languageSet = false
     if (extMatch) {
       const ext = extMatch[1].toLowerCase()
 
       const extMap: Record<string, string> = {
         'ts': 'typescript', 'tsx': 'typescript',
-        'js': 'javascript', 'jsx': 'javascript',
+        'js': 'javascript', 'jsx': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
         'vue': 'vue',
         'html': 'html', 'htm': 'html',
-        'css': 'css', 'scss': 'css', 'sass': 'css', 'less': 'css',
-        'java': 'java', 'class': 'java',
+        'css': 'css', 'scss': 'scss', 'sass': 'scss', 'less': 'css',
+        'java': 'java',
         'py': 'python',
-        'cpp': 'cpp', 'cxx': 'cpp', 'cc': 'cpp', 'c': 'cpp', 'h': 'cpp', 'hpp': 'cpp',
+        'cpp': 'cpp', 'cxx': 'cpp', 'cc': 'cpp', 'c': 'cpp', 'h': 'cpp', 'hpp': 'cpp', 'c++': 'cpp',
         'go': 'go',
         'rs': 'rust',
-        'json': 'json',
+        'json': 'json', 'jsonc': 'json', 'json5': 'json',
         'sql': 'sql',
-        'md': 'markdown'
+        'md': 'markdown', 'mdx': 'markdown',
+        'rb': 'ruby',
+        'php': 'php',
+        'swift': 'swift',
+        'kt': 'kotlin', 'kts': 'kotlin',
+        'cs': 'csharp',
+        'scala': 'scala',
+        'sh': 'bash', 'bash': 'bash', 'zsh': 'bash',
+        'ps1': 'powershell', 'psm1': 'powershell',
+        'dockerfile': 'dockerfile',
+        'yml': 'yaml', 'yaml': 'yaml',
+        'xml': 'xml',
+        'graphql': 'graphql', 'gql': 'graphql',
+        'svelte': 'svelte',
+        'dart': 'dart',
+        'ex': 'elixir', 'exs': 'elixir',
+        'erl': 'erlang',
+        'hs': 'haskell',
+        'lua': 'lua',
+        'pl': 'perl', 'pm': 'perl',
+        'r': 'r',
+        'jl': 'julia',
+        'm': 'matlab',
+        'gradle': 'gradle',
+        'toml': 'toml',
+        'ini': 'ini',
+        'diff': 'diff', 'patch': 'diff',
+        'cfg': 'nginx', 'conf': 'nginx',
       }
 
-      const mappedLangId = extMap[ext]
-      // Check if it's one we support explicitly
+      const mappedLangId = extMap[ext] || LANGUAGE_ALIASES[ext]
       if (mappedLangId && SUPPORTED_LANGUAGES.some(lang => lang.id === mappedLangId)) {
         state.language = mappedLangId
+        languageSet = true
+      }
+    }
+
+    // Auto-detect language if set to auto or no language was detected from extension
+    if (state.language === 'auto' || !languageSet) {
+      const detected = detectLanguage(text)
+      if (detected && SUPPORTED_LANGUAGES.some(lang => lang.id === detected)) {
+        state.language = detected
+      } else if (detected && LANGUAGE_ALIASES[detected]) {
+        state.language = LANGUAGE_ALIASES[detected]
+      } else if (state.language !== 'auto') {
+        // Keep the manually selected language if not auto
+      } else {
+        state.language = 'plaintext'
       }
     }
   } catch (err) {
     console.error('Failed to read dragged file:', err)
+    toast.error('读取失败，请重试')
   }
 }
 
@@ -96,12 +151,16 @@ const handleExport = async (format: 'png' | 'svg') => {
     }
 
     const link = document.createElement('a')
-    link.download = `ztools-code-snippet.${format}`
+    const defaultFilename = 'Untitled.ts'
+    const fileName = state.filename && state.filename !== defaultFilename
+      ? `${state.filename.replace(/\.[^.]+$/, '')}-code-snippet`
+      : 'code-snippet'
+    link.download = `${fileName}.${format}`
     link.href = dataUrl
     link.click()
   } catch (err) {
     console.error('Export failed', err)
-    alert('导出失败，请重试')
+    toast.error('导出失败，请重试')
   }
 }
 
@@ -116,16 +175,21 @@ const copyToClipboard = async () => {
       skipFonts: true,
     })
     // Convert dataUrl to Blob
-    const res = await fetch(dataUrl)
-    const blob = await res.blob()
-    await navigator.clipboard.write([
-      new ClipboardItem({ 'image/png': blob })
-    ])
+    if (window.ztools) {
+      window.ztools.copyImage(dataUrl)
+    } else {
+      const res = await fetch(dataUrl)
+      const blob = await res.blob()
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ])
+    }
+    toast.success('已复制到剪贴板')
     copyDone.value = true
     setTimeout(() => { copyDone.value = false }, 2000)
   } catch (err) {
     console.error('Copy failed', err)
-    alert('复制失败，请试​使用导出功能')
+    toast.error('复制失败，请尝试使用导出功能')
   }
 }
 
@@ -139,7 +203,6 @@ onMounted(() => {
   document.addEventListener('click', closeExportMenu)
   if (window.ztools) {
     window.ztools.onPluginEnter((action: any) => {
-      // ready
     })
     window.ztools.onPluginOut(() => {
     })
@@ -153,6 +216,7 @@ onUnmounted(() => {
 
 <template>
   <div class="app-viewport" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
+    <CsToastProvider />
 
     <!-- Drag Overlay -->
     <Transition name="fade">
@@ -168,7 +232,7 @@ onUnmounted(() => {
     <header class="global-header">
       <div class="header-right">
         <!-- About Button -->
-        <CsButton variant="ghost" size="sm" @click="showAbout = true">
+        <CsButton variant="secondary" size="sm" @click="showAbout = true">
           <Info :size="15" />
           <span>关于</span>
         </CsButton>
@@ -180,14 +244,8 @@ onUnmounted(() => {
             <span>导出图片</span>
           </CsButton>
           <div class="btn-export-divider"></div>
-          <CsButton 
-            class="btn-export-drop-inner" 
-            :class="{ 'menu-open': showExportMenu }"
-            variant="danger" 
-            size="sm" 
-            :icon-only="true" 
-            @click.stop="showExportMenu = !showExportMenu"
-          >
+          <CsButton class="btn-export-drop-inner" :class="{ 'menu-open': showExportMenu }" variant="danger" size="sm"
+            :icon-only="true" @click.stop="showExportMenu = !showExportMenu">
             <ChevronDown :size="15" class="drop-chevron" :class="{ 'rotated': showExportMenu }" />
           </CsButton>
 
@@ -235,35 +293,7 @@ onUnmounted(() => {
     <Toolbar class="fixed-toolbar" />
 
     <!-- About Modal -->
-    <Transition name="fade">
-      <div v-if="showAbout" class="about-modal-overlay" @click="showAbout = false">
-        <div class="about-modal" @click.stop>
-          <button class="close-about-btn" @click="showAbout = false">
-            <X :size="16" />
-          </button>
-          <div class="about-icon-wrapper">
-            <div class="about-icon">
-              <!-- simple decorative code icon -->
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="16 18 22 12 16 6"></polyline>
-                <polyline points="8 6 2 12 8 18"></polyline>
-              </svg>
-            </div>
-          </div>
-          <h2 class="about-title">Code Screenshot</h2>
-          <p class="about-version">v1.0.0</p>
-          <p class="about-desc">
-            一款优雅而专业的代码截图工具。<br />
-            将您的代码片段转化为精美的设计图片，支持语法高亮与多种极客主题。<br />
-            基于强大且开放的 ztools 插件生态。
-          </p>
-          <div class="about-footer">
-            <span class="about-brand">Designed perfectly with Vue 3 & Shiki</span>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <AboutModal :show="showAbout" @close="showAbout = false" />
   </div>
 </template>
 
@@ -275,9 +305,10 @@ onUnmounted(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: $color-bg;
+  background-color: var(--color-bg);
   overflow: hidden;
   position: relative;
+  transition: background-color var(--transition-base);
 }
 
 .global-header {
@@ -303,15 +334,17 @@ onUnmounted(() => {
 .export-combo-btn {
   display: flex;
   align-items: center;
-  position: relative; /* Anchor for the export dropdown menu */
-  background-color: #3b1b1f;
-  border: 1px solid rgba(255, 60, 60, 0.2);
-  border-radius: $radius-lg;
-  overflow: visible; /* Allow menu to overflow the rounded container */
-  transition: background-color $transition-base, border-color $transition-base;
+  position: relative;
+  /* Anchor for the export dropdown menu */
+  background-color: var(--color-btn-bg);
+  border: 1px solid var(--color-btn-border);
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  /* Allow menu to overflow the rounded container */
+  transition: background-color var(--transition-base), border-color var(--transition-base);
 
   &:hover {
-    background-color: #4c2227;
+    background-color: var(--color-btn-hover);
     border-color: rgba(255, 60, 60, 0.3);
   }
 
@@ -322,10 +355,10 @@ onUnmounted(() => {
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    color: $color-primary !important;
+    color: var(--color-primary) !important;
 
     &:hover:not(.is-disabled) {
-      background: rgba(255, 255, 255, 0.05) !important;
+      background: var(--color-btn-hover) !important;
     }
 
     &:active:not(.is-disabled) {
@@ -335,19 +368,21 @@ onUnmounted(() => {
   }
 
   .btn-export-inner {
-    padding-left: $spacing-md;
-    padding-right: $spacing-lg;
-    font-size: $font-size-md;
+    padding-left: var(--spacing-md);
+    padding-right: var(--spacing-lg);
+    font-size: var(--spacing-md);
     font-weight: 500;
-    border-radius: $radius-lg 0 0 $radius-lg !important; /* Clip left side */
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg) !important;
+    /* Clip left side */
   }
 
   .btn-export-drop-inner {
     width: 32px;
-    border-radius: 0 $radius-lg $radius-lg 0 !important; /* Clip right side */
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0 !important;
+    /* Clip right side */
 
     .drop-chevron {
-      transition: transform $transition-bounce;
+      transition: transform var(--transition-bounce);
 
       &.rotated {
         transform: rotate(180deg);
@@ -362,75 +397,77 @@ onUnmounted(() => {
   top: calc(100% + 10px);
   right: 0;
   width: 220px;
-  background: rgba(20, 20, 22, 0.97);
+  background: var(--color-dropdown-bg);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: $radius-xl;
+  border: 1px solid var(--color-dropdown-border);
+  border-radius: var(--radius-xl);
   padding: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  z-index: $z-dropdown;
-}
+  box-shadow: var(--shadow-2xl), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  z-index: var(--z-dropdown);
+  transition: background-color var(--transition-base), border-color var(--transition-base);
 
-.export-menu-header {
-  font-size: $font-size-xs;
-  color: $color-text-muted-darker;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  padding: 4px $spacing-sm 8px;
-}
+  &-header {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted-darker);
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 4px var(--spacing-sm) 8px;
+  }
 
-.export-menu-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: $spacing-md;
-  background: transparent;
-  border: none;
-  border-radius: $radius-lg;
-  padding: 9px $spacing-sm;
-  cursor: pointer;
-  color: $color-text-muted;
-  transition: all $transition-fast;
-  text-align: left;
+  &-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-lg);
+    padding: 9px var(--spacing-sm);
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: all var(--transition-fast);
+    text-align: left;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: $color-text;
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--color-text);
 
-    .item-label {
-      color: $color-text;
+      .item-label {
+        color: var(--color-text);
+      }
     }
+
+    &-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+  }
+
+  &-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 4px 0;
   }
 }
 
-.export-menu-item-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .item-label {
-  font-size: $font-size-base;
+  font-size: var(--font-size-base);
   font-weight: 500;
-  color: $color-text-light;
-  transition: color $transition-fast;
+  color: var(--color-text-light);
+  transition: color var(--transition-fast);
 }
 
 .item-desc {
-  font-size: $font-size-xs;
-  color: $color-text-muted-darker;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted-darker);
   line-height: 1.3;
 }
 
-.export-menu-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.06);
-  margin: 4px 0;
-}
-
 .copy-check {
-  color: #4ade80; /* green-400 */
+  color: #4ade80;
+  /* green-400 */
 }
 
 /* Export Menu Transition */
@@ -464,152 +501,53 @@ onUnmounted(() => {
 
 .workspace-center {
   margin: auto;
-  padding: 100px $spacing-2xl 140px $spacing-2xl;
+  padding: 100px var(--spacing-2xl) 140px var(--spacing-2xl);
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
 }
 
-.about-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $color-modal-overlay;
-  backdrop-filter: blur(10px);
-  z-index: $z-modal;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-}
-
-.about-modal {
-  position: relative;
-  width: 380px;
-  background: $color-modal-bg;
-  backdrop-filter: blur(40px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: $spacing-4xl $spacing-3xl $spacing-3xl;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.close-about-btn {
-  position: absolute;
-  top: $spacing-md;
-  right: $spacing-md;
-  background: transparent;
-  border: none;
-  color: $color-text-muted-darker;
-  cursor: pointer;
-  padding: $spacing-sm;
-  border-radius: $radius-full;
-  border: 1px solid transparent;
-  transition: all $transition-base;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: $color-text;
-    border-color: rgba(255, 255, 255, 0.1);
+.drag {
+  &-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--color-modal-overlay);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transition: background-color var(--transition-base);
   }
-}
 
-.about-icon-wrapper {
-  width: 64px;
-  height: 64px;
-  background: linear-gradient(135deg, $color-accent-blue, $color-accent-purple);
-  border-radius: $radius-2xl;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: $spacing-xl;
-  box-shadow: 0 10px 20px rgba(56, 189, 248, 0.3);
-}
+  &-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    color: var(--color-text);
+    border: 2px dashed rgba(255, 255, 255, 0.2);
+    padding: var(--spacing-5xl) 128px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.02);
+    animation: pulse-border 2s infinite ease-in-out;
 
-.about-icon {
-  color: white;
-}
-
-.about-title {
-  margin: 0;
-  font-size: $font-size-xl;
-  font-weight: 600;
-  color: $color-text;
-  letter-spacing: -0.5px;
-}
-
-.about-version {
-  margin: 4px 0 20px;
-  font-size: $font-size-sm;
-  color: $color-text-muted;
-  font-weight: 500;
-}
-
-.about-desc {
-  margin: 0 0 $spacing-3xl;
-  font-size: $font-size-md;
-  color: $color-text-light;
-  line-height: 1.6;
-}
-
-.about-footer {
-  width: 100%;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.about-brand {
-  font-size: $font-size-xs;
-  color: $color-text-muted-darker;
-}
-
-.drag-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.drag-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  color: $color-text;
-  border: 2px dashed rgba(255, 255, 255, 0.2);
-  padding: $spacing-5xl 128px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.02);
-  animation: pulse-border 2s infinite ease-in-out;
-
-  h2 {
-    font-size: $font-size-2xl;
-    font-weight: 500;
-    margin: 0;
-    letter-spacing: 1px;
+    h2 {
+      font-size: var(--font-size-2xl);
+      font-weight: 500;
+      margin: 0;
+      letter-spacing: 1px;
+    }
   }
-}
 
-.drag-icon {
-  color: $color-accent-blue;
-  filter: $shadow-glow-blue;
+  &-icon {
+    color: var(--color-accent-blue);
+    filter: var(--shadow-glow-blue);
+  }
 }
 </style>
