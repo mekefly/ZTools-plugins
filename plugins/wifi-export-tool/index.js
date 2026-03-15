@@ -132,9 +132,9 @@ function applyFilters() {
 
         let matchTag = true;
         if (currentFilter === 'hasPassword') {
-            matchTag = !!item.password;
+            matchTag = item.password === undefined || !!item.password;
         } else if (currentFilter === 'noPassword' || currentFilter === 'open') {
-            matchTag = !item.password || item.securityType === '开放网络' || item.securityType.includes('Open');
+            matchTag = !item.password || (item.securityType && (item.securityType === '开放网络' || item.securityType.includes('Open')));
         }
 
         return matchKeyword && matchTag;
@@ -160,14 +160,15 @@ function renderCards() {
 
     wifiGrid.innerHTML = '';
     filteredData.forEach(item => {
-        const isOpen = !item.password || item.securityType.includes('开放') || item.securityType.includes('Open');
+        const isOpen = item.password === '' || (item.securityType && (item.securityType.includes('开放') || item.securityType.includes('Open')));
+        const isUnknown = item.password === undefined;
 
         const card = document.createElement('div');
         card.className = 'wifi-card';
         card.innerHTML = `
       <div class="card-header">
-        <div class="card-icon ${isOpen ? 'open' : ''}">
-          ${isOpen ? svgIconGlobe : svgIconLock}
+        <div class="card-icon ${isOpen && !isUnknown ? 'open' : ''}">
+          ${isOpen && !isUnknown ? svgIconGlobe : svgIconLock}
         </div>
         <div class="card-info">
           <div class="card-title" title="${item.ssid}">${item.ssid}</div>
@@ -175,8 +176,8 @@ function renderCards() {
         </div>
       </div>
       <div class="card-status">
-        <div class="status-dot ${isOpen ? 'open' : 'pwd'}"></div>
-        <span style="color: var(--text-muted)">${isOpen ? '无需密码' : '已保存密码'}</span>
+        <div class="status-dot ${isUnknown || !isOpen ? 'pwd' : 'open'}"></div>
+        <span style="color: var(--text-muted)">${isUnknown ? '点击查看密码' : (isOpen ? '无需密码' : '已保存密码')}</span>
       </div>
     `;
 
@@ -185,7 +186,7 @@ function renderCards() {
     });
 }
 
-function openModal(item) {
+async function openModal(item) {
     modalSsid.textContent = item.ssid;
     modalInputSsid.value = item.ssid;
     modalInputSecurity.value = item.securityType;
@@ -194,15 +195,50 @@ function openModal(item) {
     modalInputPassword.type = 'password';
     togglePasswordBtn.textContent = '显示密码';
 
-    if (!item.password) {
-        togglePasswordBtn.style.display = 'none';
+    if (item.password === undefined) {
         modalInputPassword.type = 'text';
-        modalInputPassword.value = '无';
+        modalInputPassword.value = '正在获取密码...';
+        togglePasswordBtn.style.display = 'none';
+        modal.classList.add('active');
+        
+        try {
+            const api = window.wifiApi || globalThis.wifiApi;
+            if (api && typeof api.getWifiPassword === 'function') {
+                const pwd = await api.getWifiPassword(item.ssid);
+                item.password = pwd || '';
+                
+                if (!item.password) {
+                    modalInputPassword.value = '无';
+                } else {
+                    modalInputPassword.type = 'password';
+                    modalInputPassword.value = item.password;
+                    togglePasswordBtn.style.display = 'block';
+                    item.securityType = 'WPA/WPA2';
+                    modalInputSecurity.value = item.securityType;
+                }
+                renderCards();
+            } else {
+                modalInputPassword.value = '获取失败: 缺少 API';
+                item.password = '';
+                renderCards();
+            }
+        } catch (error) {
+            modalInputPassword.value = '获取失败';
+            item.password = '';
+            renderCards();
+        }
     } else {
-        togglePasswordBtn.style.display = 'block';
+        if (!item.password) {
+            togglePasswordBtn.style.display = 'none';
+            modalInputPassword.type = 'text';
+            modalInputPassword.value = '无';
+        } else {
+            togglePasswordBtn.style.display = 'block';
+            modalInputPassword.type = 'password';
+            modalInputPassword.value = item.password;
+        }
+        modal.classList.add('active');
     }
-
-    modal.classList.add('active');
 }
 
 function closeModal() {

@@ -14,9 +14,6 @@
 
 在 Ztools 应用中搜索 `wifi-export-tool` 进行安装，或手动安装：
 
-```bash
-npm install wifi-export-tool
-```
 
 ## 使用方式
 

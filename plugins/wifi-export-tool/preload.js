@@ -35,6 +35,29 @@ const wifiApi = {
             console.error("Failed to get wifi list:", err);
             throw err;
         }
+    },
+    getWifiPassword: async (ssid) => {
+        const platform = os.platform();
+        try {
+            if (platform === 'darwin') {
+                const pwdOutput = await execCmd(`security find-generic-password -wa "${ssid}"`);
+                return pwdOutput.trim();
+            } else if (platform === 'win32') {
+                const profileOutput = await execCmd(`chcp 65001 >nul && netsh wlan show profile name="${ssid}" key=clear`);
+                const pwdMatch = profileOutput.match(/(?:关键内容|Key Content|Key content)\s*:\s*(.*)/i);
+                if (pwdMatch) {
+                    return pwdMatch[1].trim();
+                }
+            } else if (platform === 'linux') {
+                const detail = await execCmd(`nmcli -s -g 802-11-wireless-security.psk connection show "${ssid}"`);
+                if (detail && detail.trim()) {
+                     return detail.trim();
+                }
+            }
+        } catch (e) {
+            console.error(`获取 ${ssid} 密码失败:`, e);
+        }
+        return '';
     }
 };
 
@@ -111,17 +134,8 @@ async function getMacWifi() {
 
         const results = [];
         for (const ssid of lines) {
-            let password = '';
-            let securityType = '开放网络';
-            try {
-                const pwdOutput = await execCmd(`security find-generic-password -wa "${ssid}"`);
-                password = pwdOutput.trim();
-                if (password) {
-                    securityType = 'WPA/WPA2';
-                }
-            } catch (e) { }
-
-            results.push({ ssid, password, securityType });
+            // macOS 批量获取密码会导致频繁弹窗，因此默认不获取，改为前台按需获取
+            results.push({ ssid, password: undefined, securityType: '未知/按需获取' });
         }
         return results;
     } catch (e) {

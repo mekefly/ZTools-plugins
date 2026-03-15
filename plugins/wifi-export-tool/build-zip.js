@@ -17,7 +17,8 @@ const filesToInclude = [
     'preload.js',
     'plugin.json',
     'package.json',
-    'assets'
+    'assets',
+    'README.md'
 ];
 
 console.log('开始打包...');
