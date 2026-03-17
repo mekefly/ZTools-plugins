@@ -2,7 +2,7 @@
   "name": "musicsquare",
   "title": "皮卡丘的音乐站",
   "description": "基于 Migu/Netease/QQ/Kuwo 的高颜值极简音乐搜索与播放工具",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.html",
   "logo": "logo.png",
   "preload": "preload.js",

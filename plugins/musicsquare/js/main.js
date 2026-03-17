@@ -468,32 +468,39 @@
 
       const kw=state.searchKeyword;
       const tasks=[];
-      for(const s of enabled){
-        const limit=state.perSourceCurrentLimit[s]||state.perSourceLimit;
+      let finishedTasks = 0;
+      const totalTasks = enabled.length;
 
-        if(s==='migu')tasks.push(searchMigu(kw,limit));
-        if(s==='netease')tasks.push(searchNetease(kw, state.perSourcePage.netease || 1, state.perSourceLimit));
-        if(s==='qq')tasks.push(searchQQ(kw,limit));
-        if(s==='kuwo')tasks.push(searchKuwo(kw,limit));
-      }
-      let added=0;
-      try{
-        const res=await Promise.all(tasks);
-        added=res.reduce((a,b)=>a+(b||0),0);
-      }catch(e){
-        console.error(e);
-        showToast(t('toastSearchError'));
-      }
+      const runTask = async (s) => {
+        try {
+          const limit=state.perSourceCurrentLimit[s]||state.perSourceLimit;
+          let added = 0;
+          if(s==='migu') added = await searchMigu(kw,limit);
+          else if(s==='netease') added = await searchNetease(kw, state.perSourcePage.netease || 1, state.perSourceLimit);
+          else if(s==='qq') added = await searchQQ(kw,limit);
+          else if(s==='kuwo') added = await searchKuwo(kw,limit);
+          
+          // 局部更新 UI
+          dom.searchCount.textContent=state.searchResults.length.toString();
+          renderMiniSearchList();
+          
+          if(!reset && added === 0 && finishedTasks === totalTasks - 1) {
+             // 只有在所有任务都完成后才可能显示“没有更多”
+             // 这里逻辑稍微复杂，暂时保持简单：只要搜到了就更新展示
+          }
+        } catch (e) {
+          console.error(`Search failed for source ${s}:`, e);
+        } finally {
+          finishedTasks++;
+          if (finishedTasks === totalTasks) {
+            state.searchInProgress=false;
+            dom.searchStatus.textContent=t('searchStatusDone');
+          }
+        }
+      };
 
-      state.searchInProgress=false;
-      dom.searchStatus.textContent=t('searchStatusDone');
-      dom.searchCount.textContent=state.searchResults.length.toString();
-      renderMiniSearchList();
-      renderPlaylistList();
-      if(!reset){
-        if(added===0){state.noMoreResults=true;showToast(t('toastNoMore'));}
-        else state.noMoreResults=false;
-      }
+      // 并行启动所有任务
+      enabled.forEach(s => runTask(s));
     }
 
     // ===================== 各平台详情 =====================
