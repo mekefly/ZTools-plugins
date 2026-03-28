@@ -7,6 +7,63 @@ const TASK_PREFIX = 'AutoMode';
 const TASK_DARK = TASK_PREFIX + '_Dark';
 const TASK_LIGHT = TASK_PREFIX + '_Light';
 
+function normalizeIpLocation(raw) {
+  if (!raw || typeof raw.latitude !== 'number' || typeof raw.longitude !== 'number' || !raw.timezone) {
+    return null;
+  }
+  return {
+    name: raw.city || '',
+    region: raw.region || raw.region_name || '',
+    country: raw.country_name || raw.country || '',
+    lat: raw.latitude,
+    lng: raw.longitude,
+    timezone: raw.timezone,
+    source: 'auto'
+  };
+}
+
+function normalizeGeocodeResult(raw) {
+  if (!raw || typeof raw.latitude !== 'number' || typeof raw.longitude !== 'number' || !raw.timezone) {
+    return null;
+  }
+  return {
+    name: raw.name || '',
+    region: raw.admin1 || '',
+    country: raw.country || '',
+    lat: raw.latitude,
+    lng: raw.longitude,
+    timezone: raw.timezone,
+    source: 'search'
+  };
+}
+
+function pickWindowEvents(events, windowStart, windowEnd) {
+  if (!Array.isArray(events) || !(windowStart instanceof Date) || !(windowEnd instanceof Date)) {
+    return null;
+  }
+
+  function pick(kind) {
+    return events.find(function(event) {
+      if (!event || event.kind !== kind || !event.iso) {
+        return false;
+      }
+      var time = new Date(event.iso);
+      return !isNaN(time.getTime()) && time >= windowStart && time < windowEnd;
+    }) || null;
+  }
+
+  var lightEvent = pick('light');
+  var darkEvent = pick('dark');
+  if (!lightEvent || !darkEvent) {
+    return null;
+  }
+
+  return {
+    lightEvent: lightEvent,
+    darkEvent: darkEvent
+  };
+}
+
 /**
  * 计算偏移后的时间字符串
  * @param {number} hours - 小时 (0-23)
@@ -101,8 +158,8 @@ function generateTaskXml(mode, time, scriptsDir) {
  */
 function generateUpdaterScript(config, scriptsDir) {
   var sunConfigFile = scriptsDir + '\\sun-config.json';
-  var psDark = scriptsDir.replace(/\\/g, '\\\\') + '\\switch-dark.ps1';
-  var psLight = scriptsDir.replace(/\\/g, '\\\\') + '\\switch-light.ps1';
+  var vbsDark = scriptsDir.replace(/\\/g, '\\\\') + '\\switch-dark.vbs';
+  var vbsLight = scriptsDir.replace(/\\/g, '\\\\') + '\\switch-light.vbs';
 
   var lines = [
     '# AutoMode: 每日更新日出日落时间并刷新计划任务',
@@ -116,20 +173,34 @@ function generateUpdaterScript(config, scriptsDir) {
     '$config = Get-Content $configFile -Raw | ConvertFrom-Json',
     '$lat = $config.lat',
     '$lng = $config.lng',
+    '$timezone = $config.timezone',
     '$offsetDark = [int]$config.offsetDark',
     '$offsetLight = [int]$config.offsetLight',
-    '$date = (Get-Date).ToString("yyyy-MM-dd")',
-    '$apiUrl = "https://api.sunrise-sunset.org/json?lat=$lat&lng=$lng&formatted=0&date=$date"',
+    '$windowStart = (Get-Date).Date.AddDays(1)',
+    '$windowEnd = $windowStart.AddDays(1)',
+    '$candidateDates = @(',
+    '  $windowStart.AddDays(-1).ToString("yyyy-MM-dd")',
+    '  $windowStart.ToString("yyyy-MM-dd")',
+    '  $windowStart.AddDays(1).ToString("yyyy-MM-dd")',
+    ') | Select-Object -Unique',
     '',
     'try {',
-    '  $result = Invoke-RestMethod -Uri $apiUrl -TimeoutSec 15',
-    '  $sunrise = [DateTime]::Parse($result.results.sunrise).ToLocalTime()',
-    '  $sunset = [DateTime]::Parse($result.results.sunset).ToLocalTime()',
-    '  $darkTime = $sunset.AddMinutes($offsetDark)',
-    '  $lightTime = $sunrise.AddMinutes($offsetLight)',
+    '  $events = @()',
+    '  foreach ($date in $candidateDates) {',
+    '    $apiUrl = "https://api.sunrise-sunset.org/json?lat=$lat&lng=$lng&formatted=0&date=$date&tzid=$timezone"',
+    '    $result = Invoke-RestMethod -Uri $apiUrl -TimeoutSec 15',
+    '    $sunrise = [DateTimeOffset]::Parse($result.results.sunrise).ToLocalTime().AddMinutes($offsetLight)',
+    '    $sunset = [DateTimeOffset]::Parse($result.results.sunset).ToLocalTime().AddMinutes($offsetDark)',
+    '    $events += [pscustomobject]@{ Kind = "light"; Time = $sunrise }',
+    '    $events += [pscustomobject]@{ Kind = "dark"; Time = $sunset }',
+    '  }',
     '',
-    '  $darkStr = $darkTime.ToString("HH:mm")',
-    '  $lightStr = $lightTime.ToString("HH:mm")',
+    '  $lightEvent = $events | Where-Object { $_.Kind -eq "light" -and $_.Time -ge $windowStart -and $_.Time -lt $windowEnd } | Sort-Object Time | Select-Object -First 1',
+    '  $darkEvent = $events | Where-Object { $_.Kind -eq "dark" -and $_.Time -ge $windowStart -and $_.Time -lt $windowEnd } | Sort-Object Time | Select-Object -First 1',
+    '  if (-not $lightEvent -or -not $darkEvent) { exit 1 }',
+    '',
+    '  $darkStr = $darkEvent.Time.ToString("HH:mm")',
+    '  $lightStr = $lightEvent.Time.ToString("HH:mm")',
     '',
     '  schtasks /Delete /TN "' + TASK_DARK + '" /F 2>$null',
     '  schtasks /Delete /TN "' + TASK_LIGHT + '" /F 2>$null',
@@ -157,8 +228,8 @@ function generateUpdaterScript(config, scriptsDir) {
     '    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit><Priority>7</Priority>',
     '  </Settings>',
     '  <Actions Context="Author"><Exec>',
-    '    <Command>powershell.exe</Command>',
-    '    <Arguments>-WindowStyle Hidden -ExecutionPolicy Bypass -File "' + psDark + '"</Arguments>',
+    '    <Command>wscript.exe</Command>',
+    '    <Arguments>"' + vbsDark + '"</Arguments>',
     '  </Exec></Actions>',
     '</Task>',
     '"@',
@@ -184,8 +255,8 @@ function generateUpdaterScript(config, scriptsDir) {
     '    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit><Priority>7</Priority>',
     '  </Settings>',
     '  <Actions Context="Author"><Exec>',
-    '    <Command>powershell.exe</Command>',
-    '    <Arguments>-WindowStyle Hidden -ExecutionPolicy Bypass -File "' + psLight + '"</Arguments>',
+    '    <Command>wscript.exe</Command>',
+    '    <Arguments>"' + vbsLight + '"</Arguments>',
     '  </Exec></Actions>',
     '</Task>',
     '"@',
@@ -196,6 +267,8 @@ function generateUpdaterScript(config, scriptsDir) {
     '',
     '  schtasks /Create /TN "' + TASK_DARK + '" /XML "$scriptsDir\\task-dark.xml" /F',
     '  schtasks /Create /TN "' + TASK_LIGHT + '" /XML "$scriptsDir\\task-light.xml" /F',
+    '} catch {',
+    '  exit 1',
     '}',
   ];
 
@@ -251,6 +324,9 @@ function validateSunConfig(config) {
   if (!config || typeof config.lat !== 'number' || typeof config.lng !== 'number') {
     return { valid: false, error: '缺少有效的 lat/lng' };
   }
+  if (!(config.name || config.city) || !config.timezone) {
+    return { valid: false, error: '缺少有效的地点名称或时区' };
+  }
   if (config.lat < -90 || config.lat > 90) {
     return { valid: false, error: '纬度必须在 -90 到 90 之间' };
   }
@@ -273,5 +349,8 @@ module.exports = {
   generateTaskXml: generateTaskXml,
   generateUpdaterScript: generateUpdaterScript,
   generateThemeSwitchScript: generateThemeSwitchScript,
-  validateSunConfig: validateSunConfig
+  validateSunConfig: validateSunConfig,
+  normalizeIpLocation: normalizeIpLocation,
+  normalizeGeocodeResult: normalizeGeocodeResult,
+  pickWindowEvents: pickWindowEvents
 };

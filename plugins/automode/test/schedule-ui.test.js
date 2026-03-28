@@ -47,3 +47,50 @@ describe('theme sync helpers', () => {
     );
   });
 });
+
+describe('sun search state helpers', () => {
+  it('should allow enable only when location and sun data are both ready', () => {
+    assert.equal(
+      uiState.canEnableSunMode({
+        selectedLocation: { name: 'London' },
+        sunTimesReady: true,
+        sunFetchError: false
+      }),
+      true
+    );
+  });
+
+  it('should reject enable when sunrise data has failed to load', () => {
+    assert.equal(
+      uiState.canEnableSunMode({
+        selectedLocation: { name: 'London' },
+        sunTimesReady: false,
+        sunFetchError: true
+      }),
+      false
+    );
+  });
+
+  it('should show empty-result state only after a completed search with no matches', () => {
+    assert.equal(
+      uiState.shouldShowSearchEmpty({
+        query: 'Lo',
+        loading: false,
+        error: false,
+        results: []
+      }),
+      true
+    );
+  });
+
+  it('should show search error only for meaningful queries after a failed request', () => {
+    assert.equal(
+      uiState.shouldShowSearchError({
+        query: 'Lon',
+        loading: false,
+        error: true
+      }),
+      true
+    );
+  });
+});

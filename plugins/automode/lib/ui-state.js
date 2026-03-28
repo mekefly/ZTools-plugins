@@ -16,8 +16,31 @@
     return state.previousIsDark !== !!state.detectedIsDark;
   }
 
+  function canEnableSunMode(state) {
+    return !!state && !!state.selectedLocation && !!state.sunTimesReady && !state.sunFetchError;
+  }
+
+  function shouldShowSearchEmpty(state) {
+    return !!state &&
+      (state.query || '').trim().length >= 2 &&
+      !state.loading &&
+      !state.error &&
+      Array.isArray(state.results) &&
+      state.results.length === 0;
+  }
+
+  function shouldShowSearchError(state) {
+    return !!state &&
+      (state.query || '').trim().length >= 2 &&
+      !state.loading &&
+      !!state.error;
+  }
+
   return {
     shouldDisableScheduleInputs: shouldDisableScheduleInputs,
-    hasThemeStateChanged: hasThemeStateChanged
+    hasThemeStateChanged: hasThemeStateChanged,
+    canEnableSunMode: canEnableSunMode,
+    shouldShowSearchEmpty: shouldShowSearchEmpty,
+    shouldShowSearchError: shouldShowSearchError
   };
 }));

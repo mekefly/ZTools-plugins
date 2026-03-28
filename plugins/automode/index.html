@@ -47,6 +47,23 @@
     .loc-text { flex: 1; font-size: 13px; color: var(--text2); }
     .loc-btn { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--accent); cursor: pointer; }
     .loc-btn:hover { opacity: 0.8; }
+    .loc-summary { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; }
+    .loc-stack { flex: 1; min-width: 0; }
+    .loc-name { font-size: 14px; font-weight: 600; line-height: 1.4; }
+    .loc-meta { font-size: 12px; color: var(--text2); margin-top: 4px; line-height: 1.4; }
+    .loc-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid rgba(74, 144, 217, 0.25); background: rgba(74, 144, 217, 0.12); color: var(--accent); font-size: 11px; }
+    .search-box { margin-top: 6px; }
+    .search-input { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-panel { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+    .search-status { padding: 10px 12px; font-size: 12px; color: var(--text2); }
+    .search-status.err { color: var(--danger); }
+    .search-results { max-height: 180px; overflow: auto; }
+    .search-item { width: 100%; border: none; border-top: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; padding: 10px 12px; cursor: pointer; }
+    .search-item:first-child { border-top: none; }
+    .search-item:hover { background: var(--card); }
+    .search-item-name { font-size: 13px; font-weight: 500; }
+    .search-item-meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
 
     .offset-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
     .offset-label { flex: 1; font-size: 13px; }
@@ -153,10 +170,24 @@
       </div>
 
       <!-- 位置信息 -->
-      <div class="loc-row">
-        <span style="font-size:16px;">&#128205;</span>
-        <span class="loc-text" id="locText">正在检测位置...</span>
-        <button class="loc-btn" id="locBtn" onclick="detectLocation()">重新定位</button>
+      <div class="loc-summary">
+        <span style="font-size:16px;line-height:22px;">&#128205;</span>
+        <div class="loc-stack">
+          <div class="flex gap8">
+            <span class="loc-name" id="locName">尚未选择位置</span>
+            <span class="loc-badge hidden" id="locSource"></span>
+          </div>
+          <div class="loc-meta" id="locText">使用当前位置或搜索城市后显示</div>
+        </div>
+        <button class="loc-btn" id="locBtn" onclick="detectLocation()">使用当前位置</button>
+      </div>
+
+      <div class="search-box">
+        <input type="text" class="search-input" id="citySearch" placeholder="搜索城市，例如 Tokyo / 上海 / London">
+      </div>
+      <div class="search-panel hidden" id="searchPanel">
+        <div class="search-status hidden" id="searchStatus"></div>
+        <div class="search-results" id="searchResults"></div>
       </div>
 
       <!-- 日出日落时间 -->
@@ -164,13 +195,13 @@
         <div class="sun-item">
           <div class="sun-icon">&#127749;</div>
           <div class="sun-time" id="sunriseTime">--:--</div>
-          <div class="sun-label">日出</div>
+          <div class="sun-label">日出（城市当地时间）</div>
         </div>
         <div style="font-size:24px;color:var(--text2);align-self:center;">&#8596;</div>
         <div class="sun-item">
           <div class="sun-icon">&#127751;</div>
           <div class="sun-time" id="sunsetTime">--:--</div>
-          <div class="sun-label">日落</div>
+          <div class="sun-label">日落（城市当地时间）</div>
         </div>
       </div>
 
@@ -192,7 +223,7 @@
 
       <!-- 实际生效时间 -->
       <div class="effective-row hidden" id="effectiveRow">
-        实际切换时间：浅色 <span id="effLight">--:--</span> | 深色 <span id="effDark">--:--</span>
+        本机实际切换时间：浅色 <span id="effLight">--:--</span> | 深色 <span id="effDark">--:--</span>
       </div>
     </div>
 
@@ -239,8 +270,14 @@
     var updaterStat = document.getElementById('updaterStat');
     var updaterRow = document.getElementById('updaterRow');
     var toastEl = document.getElementById('toast');
+    var locName = document.getElementById('locName');
     var locText = document.getElementById('locText');
+    var locSource = document.getElementById('locSource');
     var locBtn = document.getElementById('locBtn');
+    var citySearch = document.getElementById('citySearch');
+    var searchPanel = document.getElementById('searchPanel');
+    var searchStatus = document.getElementById('searchStatus');
+    var searchResults = document.getElementById('searchResults');
     var sunriseTime = document.getElementById('sunriseTime');
     var sunsetTime = document.getElementById('sunsetTime');
     var effectiveRow = document.getElementById('effectiveRow');
@@ -253,17 +290,49 @@
       hasThemeStateChanged: function(state) {
         if (!state) return false;
         return state.previousIsDark !== !!state.detectedIsDark;
+      },
+      canEnableSunMode: function(state) {
+        return !!state && !!state.selectedLocation && !!state.sunTimesReady && !state.sunFetchError;
+      },
+      shouldShowSearchEmpty: function(state) {
+        return !!state &&
+          (state.query || '').trim().length >= 2 &&
+          !state.loading &&
+          !state.error &&
+          Array.isArray(state.results) &&
+          state.results.length === 0;
+      },
+      shouldShowSearchError: function(state) {
+        return !!state &&
+          (state.query || '').trim().length >= 2 &&
+          !state.loading &&
+          !!state.error;
       }
     };
     var themeMedia = null;
     var themeMediaListener = null;
     var themePollTimer = null;
     var lastThemeIsDark = null;
+    var searchTimer = null;
+    var sunRefreshTimer = null;
 
     try { ztools.setExpendHeight(600); } catch(e) {}
 
     var currentMode = 'schedule'; // 'schedule' | 'sun'
-    var sunLocation = null; // { lat, lng, city, region }
+    var selectedLocation = null;
+    var searchState = {
+      query: '',
+      loading: false,
+      error: false,
+      results: []
+    };
+    var sunState = {
+      loading: false,
+      ready: false,
+      error: false,
+      data: null,
+      message: ''
+    };
 
     // ========== Toast ==========
 
@@ -294,8 +363,9 @@
       document.getElementById('schedulePanel').className = 'schedule-panel' + (mode === 'schedule' ? ' show card' : '');
       document.getElementById('sunPanel').className = 'sun-panel' + (mode === 'sun' ? ' show card' : '');
       updateScheduleInputState();
+      renderSunToggleState();
 
-      if (mode === 'sun' && !sunLocation) {
+      if (mode === 'sun' && !selectedLocation) {
         detectLocation();
       }
     }
@@ -376,6 +446,292 @@
       });
     }
 
+    function getOffsetValue(input) {
+      var value = parseInt(input.value, 10);
+      return isNaN(value) ? 0 : value;
+    }
+
+    function renderSelectedLocation() {
+      if (!selectedLocation) {
+        locName.textContent = '尚未选择位置';
+        locText.textContent = '使用当前位置或搜索城市后显示';
+        locSource.textContent = '';
+        locSource.classList.add('hidden');
+        return;
+      }
+
+      var fallbackName = '';
+      if (typeof selectedLocation.lat === 'number' && typeof selectedLocation.lng === 'number') {
+        fallbackName = selectedLocation.lat.toFixed(2) + ', ' + selectedLocation.lng.toFixed(2);
+      }
+      locName.textContent = selectedLocation.name || fallbackName || '已选择位置';
+      locText.textContent = [
+        selectedLocation.region,
+        selectedLocation.country,
+        selectedLocation.timezone
+      ].filter(Boolean).join(' · ') || '已选择位置';
+
+      if (selectedLocation.source === 'auto') {
+        locSource.textContent = '当前定位';
+        locSource.classList.remove('hidden');
+      } else if (selectedLocation.source === 'search') {
+        locSource.textContent = '手动选择';
+        locSource.classList.remove('hidden');
+      } else {
+        locSource.textContent = '';
+        locSource.classList.add('hidden');
+      }
+    }
+
+    function renderSunToggleState() {
+      var canEnable = uiState.canEnableSunMode({
+        selectedLocation: selectedLocation,
+        sunTimesReady: sunState.ready,
+        sunFetchError: sunState.error
+      });
+      sunTog.disabled = !sunTog.checked && !canEnable;
+    }
+
+    function renderSunTimes() {
+      if (sunState.loading) {
+        sunriseTime.textContent = '加载中';
+        sunsetTime.textContent = '加载中';
+        effectiveRow.classList.add('hidden');
+        renderSunToggleState();
+        return;
+      }
+
+      if (sunState.ready && sunState.data) {
+        sunriseTime.textContent = sunState.data.sunriseCity || sunState.data.sunrise || '--:--';
+        sunsetTime.textContent = sunState.data.sunsetCity || sunState.data.sunset || '--:--';
+        effLight.textContent = sunState.data.lightTimeLocal || '--:--';
+        effDark.textContent = sunState.data.darkTimeLocal || '--:--';
+        effectiveRow.classList.remove('hidden');
+        renderSunToggleState();
+        return;
+      }
+
+      if (sunState.error) {
+        sunriseTime.textContent = '获取失败';
+        sunsetTime.textContent = '获取失败';
+        effectiveRow.classList.add('hidden');
+        renderSunToggleState();
+        return;
+      }
+
+      sunriseTime.textContent = '--:--';
+      sunsetTime.textContent = '--:--';
+      effectiveRow.classList.add('hidden');
+      renderSunToggleState();
+    }
+
+    function resetSunState() {
+      sunState = {
+        loading: false,
+        ready: false,
+        error: false,
+        data: null,
+        message: ''
+      };
+      renderSunTimes();
+    }
+
+    function buildSunConfigFromSelection() {
+      if (!selectedLocation) {
+        return null;
+      }
+      return {
+        lat: selectedLocation.lat,
+        lng: selectedLocation.lng,
+        name: selectedLocation.name || '',
+        region: selectedLocation.region || '',
+        country: selectedLocation.country || '',
+        timezone: selectedLocation.timezone || '',
+        offsetDark: getOffsetValue(offsetDark),
+        offsetLight: getOffsetValue(offsetLight)
+      };
+    }
+
+    function loadSunTimesForSelection() {
+      var config = buildSunConfigFromSelection();
+      if (!config) {
+        resetSunState();
+        return;
+      }
+      if (!config.timezone) {
+        sunState = {
+          loading: false,
+          ready: false,
+          error: true,
+          data: null,
+          message: '缺少时区信息，请重新选择城市'
+        };
+        renderSunTimes();
+        return;
+      }
+
+      sunState = {
+        loading: true,
+        ready: false,
+        error: false,
+        data: null,
+        message: ''
+      };
+      renderSunTimes();
+
+      try {
+        var result = window.themeAPI.fetchSunTimes(
+          config.lat,
+          config.lng,
+          config.timezone,
+          {
+            offsetDark: config.offsetDark,
+            offsetLight: config.offsetLight,
+            windowOffsetDays: 0
+          }
+        );
+
+        if (result && result.success && result.data) {
+          sunState = {
+            loading: false,
+            ready: true,
+            error: false,
+            data: result.data,
+            message: ''
+          };
+        } else {
+          sunState = {
+            loading: false,
+            ready: false,
+            error: true,
+            data: null,
+            message: result && result.error ? result.error : '获取日出日落失败'
+          };
+        }
+      } catch(e) {
+        sunState = {
+          loading: false,
+          ready: false,
+          error: true,
+          data: null,
+          message: e.message
+        };
+      }
+
+      renderSunTimes();
+    }
+
+    function queueSunRefresh(delay) {
+      clearTimeout(sunRefreshTimer);
+      if (!selectedLocation) {
+        resetSunState();
+        return;
+      }
+      sunRefreshTimer = setTimeout(loadSunTimesForSelection, delay || 0);
+    }
+
+    function renderSearchResults() {
+      var trimmed = (searchState.query || '').trim();
+      var shouldShow = trimmed.length >= 2;
+      searchPanel.classList.toggle('hidden', !shouldShow);
+      searchStatus.className = 'search-status hidden';
+      searchStatus.textContent = '';
+      searchResults.innerHTML = '';
+
+      if (!shouldShow) {
+        return;
+      }
+
+      if (searchState.loading) {
+        searchStatus.textContent = '搜索中...';
+        searchStatus.className = 'search-status';
+        return;
+      }
+
+      if (uiState.shouldShowSearchError(searchState)) {
+        searchStatus.textContent = '搜索失败，请检查网络后重试';
+        searchStatus.className = 'search-status err';
+        return;
+      }
+
+      if (uiState.shouldShowSearchEmpty(searchState)) {
+        searchStatus.textContent = '未找到匹配城市';
+        searchStatus.className = 'search-status';
+        return;
+      }
+
+      searchState.results.forEach(function(item) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'search-item';
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'search-item-name';
+        nameEl.textContent = item.name || '未命名地点';
+
+        var metaEl = document.createElement('div');
+        metaEl.className = 'search-item-meta';
+        metaEl.textContent = [
+          [item.region, item.country].filter(Boolean).join(', '),
+          item.timezone
+        ].filter(Boolean).join(' · ');
+
+        button.appendChild(nameEl);
+        button.appendChild(metaEl);
+        button.addEventListener('click', function() {
+          selectedLocation = item;
+          renderSelectedLocation();
+          searchState = {
+            query: '',
+            loading: false,
+            error: false,
+            results: []
+          };
+          citySearch.value = '';
+          renderSearchResults();
+          queueSunRefresh(40);
+        });
+        searchResults.appendChild(button);
+      });
+    }
+
+    function queueCitySearch() {
+      clearTimeout(searchTimer);
+      searchState.query = citySearch.value;
+      searchState.loading = false;
+      searchState.error = false;
+      searchState.results = [];
+      renderSearchResults();
+
+      var trimmed = (searchState.query || '').trim();
+      if (trimmed.length < 2) {
+        return;
+      }
+
+      searchState.loading = true;
+      renderSearchResults();
+
+      searchTimer = setTimeout(function() {
+        try {
+          var result = window.themeAPI.searchCities(trimmed);
+          if (result && result.success) {
+            searchState.loading = false;
+            searchState.error = false;
+            searchState.results = Array.isArray(result.data) ? result.data : [];
+          } else {
+            searchState.loading = false;
+            searchState.error = true;
+            searchState.results = [];
+          }
+        } catch(e) {
+          searchState.loading = false;
+          searchState.error = true;
+          searchState.results = [];
+        }
+        renderSearchResults();
+      }, 300);
+    }
+
     // ========== 任务状态 ==========
 
     function refreshTasks() {
@@ -396,105 +752,105 @@
           schedStat.textContent = '未启用';
           schedStat.className = 'val';
         }
-
-        // 恢复保存的配置
-        try {
-          var saved = window.themeAPI.getSavedConfig();
-          if (saved.enabled) {
-            if (saved.mode === 'sun' && saved.config) {
-              sunLocation = { lat: saved.config.lat, lng: saved.config.lng, city: saved.config.city };
-              locText.textContent = saved.config.city || (saved.config.lat.toFixed(2) + ', ' + saved.config.lng.toFixed(2));
-              offsetDark.value = saved.config.offsetDark || 0;
-              offsetLight.value = saved.config.offsetLight || 0;
-              switchMode('sun');
-              sunTog.checked = true;
-              fetchAndUpdateSunTimes();
-            } else if (saved.config) {
-              var dp = saved.config.darkTime.split(':');
-              var lp = saved.config.lightTime.split(':');
-              darkH.value = dp[0]; darkM.value = dp[1];
-              lightH.value = lp[0]; lightM.value = lp[1];
-              switchMode('schedule');
-              tog.checked = true;
-            }
-          }
-        } catch(e) {}
+        tog.checked = s.enabled && !s.isSunMode;
+        sunTog.checked = s.enabled && s.isSunMode;
         updateScheduleInputState();
+        renderSunToggleState();
       } catch(e) {
         darkStat.textContent = '查询失败';
         lightStat.textContent = '查询失败';
         updateScheduleInputState();
+        renderSunToggleState();
       }
     }
 
     // ========== 日出日落 ==========
 
     function detectLocation() {
-      locText.textContent = '正在检测...';
+      if (!selectedLocation) {
+        locName.textContent = '正在定位...';
+        locText.textContent = '正在获取当前位置';
+        locSource.textContent = '';
+        locSource.classList.add('hidden');
+      }
       locBtn.disabled = true;
       setTimeout(function() {
         try {
           var loc = window.themeAPI.getUserLocation();
-          if (loc) {
-            sunLocation = loc;
-            locText.textContent = loc.city + ', ' + (loc.region || loc.country || '');
-            toast('位置已定位: ' + loc.city, 'ok');
-            fetchAndUpdateSunTimes();
+          if (loc && loc.success && loc.data) {
+            selectedLocation = loc.data;
+            renderSelectedLocation();
+            citySearch.value = '';
+            searchState = {
+              query: '',
+              loading: false,
+              error: false,
+              results: []
+            };
+            renderSearchResults();
+            toast('位置已定位: ' + (selectedLocation.name || '当前位置'), 'ok');
+            queueSunRefresh(40);
           } else {
-            locText.textContent = '定位失败，请检查网络';
+            if (!selectedLocation) {
+              renderSelectedLocation();
+            }
             toast('位置检测失败', 'err');
           }
         } catch(e) {
-          locText.textContent = '定位失败: ' + e.message;
-          toast('位置检测失败', 'err');
+          if (!selectedLocation) {
+            renderSelectedLocation();
+          }
+          toast('位置检测失败: ' + e.message, 'err');
         }
         locBtn.disabled = false;
       }, 50);
     }
 
-    function fetchAndUpdateSunTimes() {
-      if (!sunLocation) return;
-      sunriseTime.textContent = '--:--';
-      sunsetTime.textContent = '--:--';
-      effectiveRow.classList.add('hidden');
-
-      setTimeout(function() {
-        try {
-          var sun = window.themeAPI.fetchSunTimes(sunLocation.lat, sunLocation.lng);
-          if (sun) {
-            sunriseTime.textContent = sun.sunrise;
-            sunsetTime.textContent = sun.sunset;
-            updateEffectiveTimes();
-          } else {
-            sunriseTime.textContent = '获取失败';
-            sunsetTime.textContent = '获取失败';
-          }
-        } catch(e) {
-          sunriseTime.textContent = '错误';
-          sunsetTime.textContent = '错误';
+    function restoreSavedState() {
+      try {
+        var saved = window.themeAPI.getSavedConfig();
+        if (!saved || !saved.config) {
+          renderSelectedLocation();
+          renderSunToggleState();
+          return;
         }
-      }, 50);
-    }
 
-    function updateEffectiveTimes() {
-      var sr = sunriseTime.textContent;
-      var ss = sunsetTime.textContent;
-      if (sr.indexOf('--') === -1 && ss.indexOf('--') === -1) {
-        var [srH, srM] = sr.split(':').map(Number);
-        var [ssH, ssM] = ss.split(':').map(Number);
-        var offD = parseInt(offsetDark.value) || 0;
-        var offL = parseInt(offsetLight.value) || 0;
+        if (saved.mode === 'schedule' && saved.config.darkTime && saved.config.lightTime) {
+          var dp = saved.config.darkTime.split(':');
+          var lp = saved.config.lightTime.split(':');
+          darkH.value = dp[0];
+          darkM.value = dp[1];
+          lightH.value = lp[0];
+          lightM.value = lp[1];
+          tog.checked = !!saved.enabled;
+          switchMode('schedule');
+          return;
+        }
 
-        var lMin = ((srH * 60 + srM + offL) % 1440 + 1440) % 1440;
-        var dMin = ((ssH * 60 + ssM + offD) % 1440 + 1440) % 1440;
-        effLight.textContent = String(Math.floor(lMin / 60)).padStart(2, '0') + ':' + String(lMin % 60).padStart(2, '0');
-        effDark.textContent = String(Math.floor(dMin / 60)).padStart(2, '0') + ':' + String(dMin % 60).padStart(2, '0');
-        effectiveRow.classList.remove('hidden');
+        selectedLocation = {
+          name: saved.config.name || saved.config.city || '',
+          region: saved.config.region || '',
+          country: saved.config.country || '',
+          lat: saved.config.lat,
+          lng: saved.config.lng,
+          timezone: saved.config.timezone || '',
+          source: saved.config.source || ''
+        };
+        offsetDark.value = saved.config.offsetDark || 0;
+        offsetLight.value = saved.config.offsetLight || 0;
+        sunTog.checked = !!saved.enabled;
+        renderSelectedLocation();
+        switchMode('sun');
+        queueSunRefresh(40);
+      } catch(e) {
+        renderSelectedLocation();
+        renderSunToggleState();
       }
     }
 
-    offsetDark.addEventListener('input', updateEffectiveTimes);
-    offsetLight.addEventListener('input', updateEffectiveTimes);
+    citySearch.addEventListener('input', queueCitySearch);
+    offsetDark.addEventListener('input', function() { queueSunRefresh(300); });
+    offsetLight.addEventListener('input', function() { queueSunRefresh(300); });
 
     // ========== 定时模式 Toggle ==========
 
@@ -534,28 +890,34 @@
 
     sunTog.addEventListener('change', function() {
       if (sunTog.checked) {
-        if (!sunLocation) { toast('请先检测位置', 'err'); sunTog.checked = false; return; }
-        var sr = sunriseTime.textContent;
-        var ss = sunsetTime.textContent;
-        if (sr.indexOf('--') !== -1 || ss.indexOf('--') !== -1) { toast('日出日落时间获取中，请稍候', 'err'); sunTog.checked = false; return; }
+        var canEnable = uiState.canEnableSunMode({
+          selectedLocation: selectedLocation,
+          sunTimesReady: sunState.ready,
+          sunFetchError: sunState.error
+        });
+        if (!canEnable) {
+          toast(sunState.message || '请先选择有效城市并完成日出日落获取', 'err');
+          sunTog.checked = false;
+          renderSunToggleState();
+          return;
+        }
 
         try {
-          // 先禁用可能存在的旧任务（包括定时模式的任务）
           window.themeAPI.disableScheduler();
-          var config = {
-            lat: sunLocation.lat,
-            lng: sunLocation.lng,
-            city: sunLocation.city,
-            offsetDark: parseInt(offsetDark.value) || 0,
-            offsetLight: parseInt(offsetLight.value) || 0
-          };
+          var config = buildSunConfigFromSelection();
           var r = window.themeAPI.enableSunScheduler(config);
           if (r.success) {
-            tog.checked = false; // 互斥：关闭定时模式开关
+            tog.checked = false;
             toast('日出日落模式已启用', 'ok');
             notify('日出日落主题切换已启用');
-          } else { toast('启用失败: ' + r.error, 'err'); sunTog.checked = false; }
-        } catch(e) { toast('操作失败: ' + e.message, 'err'); sunTog.checked = false; }
+          } else {
+            toast('启用失败: ' + r.error, 'err');
+            sunTog.checked = false;
+          }
+        } catch(e) {
+          toast('操作失败: ' + e.message, 'err');
+          sunTog.checked = false;
+        }
       } else {
         try {
           window.themeAPI.disableScheduler();
@@ -591,6 +953,10 @@
     refreshTheme(true);
     startThemeSync();
     window.addEventListener('beforeunload', stopThemeSync);
+    renderSelectedLocation();
+    renderSunTimes();
+    renderSearchResults();
+    restoreSavedState();
     refreshTasks();
   </script>
 </body>

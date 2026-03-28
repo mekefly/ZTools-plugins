@@ -205,6 +205,73 @@ describe('lib/utils.js', () => {
       );
       assert.ok(script.includes('sun-config.json'));
     });
+
+    it('should read timezone from the saved config', () => {
+      const script = utils.generateUpdaterScript(
+        {
+          lat: 51.5085,
+          lng: -0.1257,
+          name: 'London',
+          timezone: 'Europe/London',
+          offsetDark: 0,
+          offsetLight: 0
+        },
+        'C:\\test'
+      );
+      assert.ok(script.includes('$timezone = $config.timezone'));
+      assert.ok(script.includes('tzid=$timezone'));
+    });
+
+    it('should recreate sun-mode theme tasks through hidden VBS wrappers', () => {
+      const script = utils.generateUpdaterScript(
+        {
+          lat: 51.5085,
+          lng: -0.1257,
+          name: 'London',
+          timezone: 'Europe/London',
+          offsetDark: 0,
+          offsetLight: 0
+        },
+        'C:\\test'
+      );
+      assert.ok(script.includes('<Command>wscript.exe</Command>'));
+      assert.ok(script.includes('switch-dark.vbs'));
+      assert.ok(script.includes('switch-light.vbs'));
+      assert.ok(!script.includes('<Command>powershell.exe</Command>'));
+    });
+
+    it('should plan the next machine-local day window for updater scheduling', () => {
+      const script = utils.generateUpdaterScript(
+        {
+          lat: 51.5085,
+          lng: -0.1257,
+          name: 'London',
+          timezone: 'Europe/London',
+          offsetDark: 0,
+          offsetLight: 0
+        },
+        'C:\\test'
+      );
+      assert.ok(script.includes('$windowStart = (Get-Date).Date.AddDays(1)'));
+      assert.ok(script.includes('$windowEnd = $windowStart.AddDays(1)'));
+      assert.ok(script.includes('$candidateDates = @('));
+      assert.ok(!script.includes('$date = (Get-Date).ToString("yyyy-MM-dd")'));
+    });
+
+    it('should include a catch block so updater script remains valid PowerShell', () => {
+      const script = utils.generateUpdaterScript(
+        {
+          lat: 51.5085,
+          lng: -0.1257,
+          name: 'London',
+          timezone: 'Europe/London',
+          offsetDark: 0,
+          offsetLight: 0
+        },
+        'C:\\test'
+      );
+      assert.ok(script.includes('catch {'));
+    });
   });
 
   describe('generateThemeSwitchScript(mode)', () => {
@@ -233,7 +300,7 @@ describe('lib/utils.js', () => {
 
     it('should return valid for correct config', () => {
       const result = utils.validateSunConfig({
-        lat: 31.23, lng: 121.47, city: 'Shanghai',
+        lat: 31.23, lng: 121.47, city: 'Shanghai', timezone: 'Asia/Shanghai',
         offsetDark: 15, offsetLight: -10
       });
       assert.equal(result.valid, true);
@@ -260,7 +327,14 @@ describe('lib/utils.js', () => {
     });
 
     it('should accept boundary values (90, 180)', () => {
-      const result = utils.validateSunConfig({ lat: 90, lng: 180, offsetDark: 0, offsetLight: 0 });
+      const result = utils.validateSunConfig({
+        lat: 90,
+        lng: 180,
+        city: 'Pole',
+        timezone: 'UTC',
+        offsetDark: 0,
+        offsetLight: 0
+      });
       assert.equal(result.valid, true);
     });
 
@@ -274,6 +348,78 @@ describe('lib/utils.js', () => {
     it('should handle missing lat/lng', () => {
       const result = utils.validateSunConfig({ offsetDark: 0, offsetLight: 0 });
       assert.equal(result.valid, false);
+    });
+
+    it('should reject missing timezone', () => {
+      const result = utils.validateSunConfig({
+        lat: 31.23,
+        lng: 121.47,
+        name: 'Shanghai',
+        offsetDark: 0,
+        offsetLight: 0
+      });
+      assert.equal(result.valid, false);
+    });
+  });
+
+  describe('location normalization helpers', () => {
+
+    it('should map ipapi payload into the shared location shape', () => {
+      const location = utils.normalizeIpLocation({
+        city: 'Shanghai',
+        region: 'Shanghai',
+        country_name: 'China',
+        latitude: 31.23,
+        longitude: 121.47,
+        timezone: 'Asia/Shanghai'
+      });
+      assert.deepEqual(location, {
+        name: 'Shanghai',
+        region: 'Shanghai',
+        country: 'China',
+        lat: 31.23,
+        lng: 121.47,
+        timezone: 'Asia/Shanghai',
+        source: 'auto'
+      });
+    });
+
+    it('should map Open-Meteo payload into the shared location shape', () => {
+      const location = utils.normalizeGeocodeResult({
+        name: 'London',
+        admin1: 'England',
+        country: 'United Kingdom',
+        latitude: 51.5085,
+        longitude: -0.1257,
+        timezone: 'Europe/London'
+      });
+      assert.deepEqual(location, {
+        name: 'London',
+        region: 'England',
+        country: 'United Kingdom',
+        lat: 51.5085,
+        lng: -0.1257,
+        timezone: 'Europe/London',
+        source: 'search'
+      });
+    });
+  });
+
+  describe('pickWindowEvents(events)', () => {
+    it('should select one light and one dark event inside the machine-local window', () => {
+      const windowStart = new Date('2026-03-29T00:00:00+08:00');
+      const windowEnd = new Date('2026-03-30T00:00:00+08:00');
+      const picked = utils.pickWindowEvents([
+        { kind: 'light', iso: '2026-03-28T13:07:00+08:00' },
+        { kind: 'light', iso: '2026-03-29T13:07:00+08:00' },
+        { kind: 'dark', iso: '2026-03-29T02:31:00+08:00' },
+        { kind: 'dark', iso: '2026-03-30T02:31:00+08:00' }
+      ], windowStart, windowEnd);
+
+      assert.deepEqual(picked, {
+        lightEvent: { kind: 'light', iso: '2026-03-29T13:07:00+08:00' },
+        darkEvent: { kind: 'dark', iso: '2026-03-29T02:31:00+08:00' }
+      });
     });
   });
 });
