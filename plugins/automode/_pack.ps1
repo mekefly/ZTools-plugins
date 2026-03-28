@@ -1,5 +1,5 @@
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$dir = "C:\Users\zhangyutong\VscodeProjects\AutoMode"
+$dir = $PSScriptRoot
 $out = "$dir\AutoMode.zpx"
 if (Test-Path $out) { Remove-Item $out }
 

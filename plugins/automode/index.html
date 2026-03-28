@@ -325,7 +325,7 @@
     var lastThemeIsDark = null;
     var toastTimer = null;
 
-    try { ztools.setExpendHeight(460); } catch(e) {}
+    try { ztools.setExpendHeight(460); } catch(e) { console.error(e); }
 
     function toast(msg, type) {
       toastEl.textContent = msg;
@@ -339,17 +339,17 @@
     try {
       var savedNotify = ztools.dbStorage.getItem('automode-notify');
       if (savedNotify === 'false') notifyTog.checked = false;
-    } catch(e) {}
+    } catch(e) { console.error(e); }
 
     notifyTog.addEventListener('change', function() {
       try {
         ztools.dbStorage.setItem('automode-notify', notifyTog.checked ? 'true' : 'false');
-      } catch(e) {}
+      } catch(e) { console.error(e); }
     });
 
     function notify(msg) {
       if (!notifyTog.checked) return;
-      try { ztools.showNotification(msg); } catch(e) {}
+      try { ztools.showNotification(msg); } catch(e) { console.error(e); }
     }
 
     function applyTheme(isDark) {
@@ -369,7 +369,7 @@
         var t = window.themeAPI.getCurrentTheme();
         return !!t.dark;
       } catch(e) {
-        try { return !!ztools.isDarkColors(); } catch(e2) {}
+        try { return !!ztools.isDarkColors(); } catch(e2) { console.error(e2); }
       }
       return false;
     }
@@ -468,7 +468,7 @@
         }
 
         tog.checked = !!saved.enabled;
-      } catch(e) {}
+      } catch(e) { console.error(e); }
 
       updateScheduleInputState();
     }

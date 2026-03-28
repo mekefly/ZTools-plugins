@@ -12,24 +12,24 @@
 
 ## File Structure
 
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js`
+- Modify: `lib\utils.js`
   - Add normalized location helpers, stricter sun config validation, and deterministic machine-local scheduling helpers.
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\ui-state.js`
+- Modify: `lib\ui-state.js`
   - Add pure UI-state helpers for search visibility, fetch error handling, and sunrise-mode enablement.
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\utils.test.js`
+- Modify: `test\utils.test.js`
   - Add red-green tests for new pure helpers and validation rules.
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\schedule-ui.test.js`
+- Modify: `test\schedule-ui.test.js`
   - Add red-green tests for sunrise-mode state helpers.
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\preload.js`
+- Modify: `preload.js`
   - Add geocoding search, timezone-aware sunrise fetch, scheduling-window planning, normalized persistence, and updater generation inputs.
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\index.html`
+- Modify: `index.html`
   - Add search UI, normalized location display, fetch/error states, and machine-local execution display.
 
 ### Task 1: Pure Helpers And Validation
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\utils.test.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js`
+- Modify: `test\utils.test.js`
+- Modify: `lib\utils.js`
 
 - [ ] **Step 1: Write the failing tests for normalized locations and config validation**
 
@@ -147,8 +147,8 @@ Expected: PASS for the new helper and validation tests.
 ### Task 2: Scheduling Window Helpers
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\utils.test.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js`
+- Modify: `test\utils.test.js`
+- Modify: `lib\utils.js`
 
 - [ ] **Step 1: Write the failing tests for machine-local scheduling helpers**
 
@@ -211,8 +211,8 @@ Expected: PASS for the scheduling helper tests.
 ### Task 3: UI State Helpers
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\schedule-ui.test.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\ui-state.js`
+- Modify: `test\schedule-ui.test.js`
+- Modify: `lib\ui-state.js`
 
 - [ ] **Step 1: Write the failing UI-state tests**
 
@@ -279,9 +279,9 @@ Expected: PASS for the new sunrise-mode state tests.
 ### Task 4: Preload IO And Scheduling Pipeline
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\preload.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\utils.test.js`
+- Modify: `preload.js`
+- Modify: `lib\utils.js`
+- Modify: `test\utils.test.js`
 
 - [ ] **Step 1: Write a regression test for updater script timezone persistence**
 
@@ -359,9 +359,9 @@ Expected: PASS, including the new updater-script timezone test.
 ### Task 5: UI Integration
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\index.html`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\ui-state.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\schedule-ui.test.js`
+- Modify: `index.html`
+- Modify: `lib\ui-state.js`
+- Modify: `test\schedule-ui.test.js`
 
 - [ ] **Step 1: Write a failing UI-state test for search error visibility if needed by the UI flow**
 
@@ -416,12 +416,12 @@ Expected: PASS with the new helper and existing schedule-state helpers.
 ### Task 6: Full Verification
 
 **Files:**
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\preload.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\index.html`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\ui-state.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\utils.test.js`
-- Modify: `C:\Users\zhangyutong\VscodeProjects\AutoMode\test\schedule-ui.test.js`
+- Modify: `preload.js`
+- Modify: `index.html`
+- Modify: `lib\utils.js`
+- Modify: `lib\ui-state.js`
+- Modify: `test\utils.test.js`
+- Modify: `test\schedule-ui.test.js`
 
 - [ ] **Step 1: Run the complete automated test suite**
 

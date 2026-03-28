@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`plugin.json` defines the ZTools plugin manifest. `preload.js` is the main integration layer: it manages Windows scheduled tasks, PowerShell scripts, location lookup, and theme switching. `index.html` contains the plugin UI and inline styles/scripts. Put reusable pure logic in [`lib/utils.js`](C:\Users\zhangyutong\VscodeProjects\AutoMode\lib\utils.js) so it stays testable. Tests live in `test/` and currently cover time math and XML/script generation. `logo.png` is the shipped asset, and `AutoMode.zpx` is the packaged output, not source.
+`plugin.json` defines the ZTools plugin manifest. `preload.js` is the main integration layer: it manages Windows scheduled tasks, PowerShell scripts, location lookup, and theme switching. `index.html` contains the plugin UI and inline styles/scripts. Put reusable pure logic in [`lib/utils.js`](lib/utils.js) so it stays testable. Tests live in `test/` and currently cover time math and XML/script generation. `logo.png` is the shipped asset, and `AutoMode.zpx` is the packaged output, not source.
 
 ## Build, Test, and Development Commands
 This repo does not use `package.json`; run tools directly from the repo root.
