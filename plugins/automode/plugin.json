@@ -1,0 +1,17 @@
+{
+  "name": "automode",
+  "title": "主题自动切换",
+  "version": "1.0.0",
+  "description": "定时或跟随日出日落自动切换 Windows 系统深浅色主题",
+  "author": "AutoMode",
+  "logo": "logo.png",
+  "main": "index.html",
+  "preload": "preload.js",
+  "features": [
+    {
+      "code": "theme-scheduler",
+      "explain": "定时切换系统深浅色模式",
+      "cmds": ["主题切换", "深色模式", "定时主题", "日出日落", "theme switch", "dark mode"]
+    }
+  ]
+}
