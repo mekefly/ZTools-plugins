@@ -49,7 +49,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import {onMounted, ref} from 'vue';
 
 const props = defineProps({
   enterAction: Object
@@ -57,7 +57,6 @@ const props = defineProps({
 
 const processes = ref([]);
 const filteredProcesses = ref([]);
-const searchTerm = ref('');
 const loading = ref(true);
 const message = ref('');
 const isSuccess = ref(false);
@@ -66,6 +65,7 @@ const selectedProcess = ref(null);
 
 // 加载进程列表
 const loadProcesses = async () => {
+  console.log('加载进程列表')
   try {
     loading.value = true;
     const processList = await window.services.getProcessList();
@@ -119,8 +119,7 @@ const confirmKill = async () => {
   if (!selectedProcess.value) return;
 
   try {
-    const result = await window.services.killProcess(selectedProcess.value.pid);
-    message.value = result;
+    message.value = window.services.killProcess(selectedProcess.value.pid);
     isSuccess.value = true;
     showDialog.value = false;
     // 重新加载进程列表
