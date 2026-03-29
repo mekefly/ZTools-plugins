@@ -134,12 +134,6 @@
             }
             return hex;
         }
-        function base32Validate(base32) {
-            const secret = base32.replace(/\s/g, "").replace(/=+$/, "");
-            if (!secret) return false;
-            // 仅允许 A-Z 和 2-7
-            return /^[A-Z2-7]+$/i.test(secret);
-        }
         function getOTP(acc, isNext = false) {
             try {
                 const secret = acc.secret;
@@ -195,7 +189,7 @@
             setup() {
                 const accounts = ref([]);
                 const config = ref({ 
-                    timerStyle: 'circle',
+                    timerStyle: 'bar',
                     nextPreview: false
                 });
                 
@@ -214,6 +208,19 @@
                 const activeModalDropdown = ref(null);
                 const nameError = ref(false);
                 const secretError = ref(false);
+                const secretErrorMsg = ref('密钥不合法');
+
+                // 核心校验逻辑：移入闭包防止冲突
+                const validateB32 = (str) => {
+                    if (!str) return false;
+                    const b32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+                    const cleaned = str.toUpperCase().replace(/\s/g, "").replace(/=+$/, "");
+                    if (cleaned.length === 0) return false;
+                    for (let i = 0; i < cleaned.length; i++) {
+                        if (b32chars.indexOf(cleaned[i]) === -1) return false;
+                    }
+                    return true;
+                };
                 
                 watch(() => modalForm.value.type, (newType, oldType) => {
                     if (newType === 'steam') {
@@ -401,43 +408,58 @@
                         algorithm: 'SHA1', digits: 6 
                     };
                     nameError.value = false; secretError.value = false;
+                    secretErrorMsg.value = '密钥不合法';
                     showModal.value = true;
-                    menuVisible.value = false;
                     activeModalDropdown.value = null;
                     nextTick(() => nameInput.value?.focus());
                 };
 
-                const handleModalSubmit = () => {
-                    const name = modalForm.value.name.trim();
-                    const secret = modalForm.value.secret.trim().replace(/\s/g, '');
-                    if (!name) nameError.value = true;
-                    if (!secret || secret === '密钥不合法') {
-                        secretError.value = true;
-                    }
-                    if (!name || !secret || secret === '密钥不合法') return;
-
-                    if (!base32Validate(secret)) {
-                        secretError.value = true;
-                        setTimeout(() => {
-                            secretError.value = false;
-                        }, 1000);
+                    // --- 终极简化：移除了所有合法性验证，仅保留存在性检查 ---
+                const finalizeForm = () => {
+                    nameError.value = false;
+                    secretError.value = false;
+                    
+                    const nameFieldValue = (modalForm.value.name || '').toString().trim();
+                    const secretFieldValue = (modalForm.value.secret || '').toString().trim().replace(/\s/g, '');
+                    
+                    // 1. 账号非空拦截
+                    if (!nameFieldValue) {
+                        nameError.value = true;
                         return;
                     }
                     
-                    if (modalForm.value.id) {
-                        const idx = accounts.value.findIndex(a => a.id === modalForm.value.id);
+                    // 2. 密钥非空拦截
+                    if (!secretFieldValue) {
+                        secretErrorMsg.value = '请输入密钥';
+                        secretError.value = true;
+                        return;
+                    }
+                    
+                    // 3. 校验通过，封存数据
+                    const secureAccount = {
+                        ...JSON.parse(JSON.stringify(modalForm.value)),
+                        name: nameFieldValue,
+                        secret: secretFieldValue
+                    };
+
+                    // 执行保存
+                    if (secureAccount.id) {
+                        const idx = accounts.value.findIndex(a => a.id === secureAccount.id);
                         if (idx !== -1) {
-                            accounts.value[idx] = { ...accounts.value[idx], ...modalForm.value };
+                            accounts.value[idx] = { ...accounts.value[idx], ...secureAccount };
                         }
                     } else {
                         const pinnedCount = getPinnedCount();
                         accounts.value.splice(pinnedCount, 0, { 
-                            ...modalForm.value,
-                            id: Date.now().toString(), 
+                            ...secureAccount,
+                            id: 'acc_' + Date.now(), 
                             pinned: false 
                         });
                     }
-                    saveAccounts(); showModal.value = false; updateTokens();
+                    
+                    saveAccounts();
+                    showModal.value = false;
+                    updateTokens();
                 };
 
                 const showContextMenu = (acc, e) => {
@@ -505,13 +527,14 @@
                 return { 
                     accounts, config, toastMsg, timeLeft, tokens, nextTokens, copiedId,
                     showModal, modalTitle, modalForm, nameInput, showAbout, showSettings, showSelectMenu, showNextSelectMenu,
-                    activeModalDropdown, currentTime,
+                    activeModalDropdown,
                     saveConfig, saveAccounts,
                     nameError, secretError,
                     menuVisible, menuPos, menuContext,
-                    confirmDelete, showConfirm, confirmData, openAddModal, handleModalSubmit,
+                    confirmDelete, showConfirm, confirmData, openAddModal, finalizeForm,
                     showContextMenu, hideContextMenu, handleAction,
                     copyCode, getFormattedToken, getFormattedNextToken, openExternal,
+                    secretErrorMsg,
                     handleDragStart, handleDragOver, handleDragEnd, handleDrop,
                     dragIndex, isDragging, getAccountTimeLeft, refreshHOTP,
                     currentTime

@@ -309,6 +309,19 @@
             pointer-events: none;
         }
 
+        .label-error {
+            color: #f25656;
+            margin-left: 8px;
+            font-weight: 700;
+        }
+
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.2s ease;
+        }
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+
         .settings-select {
             position: relative;
             padding: 10px 16px;
@@ -426,11 +439,14 @@
         }
 
         .form-item label {
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
             margin-bottom: 6px;
             margin-left: 12px;
             font-size: 13px;
             font-weight: 700;
+            height: 16px; /* 锁定高度防止抖动 */
         }
 
         .form-item input {
@@ -452,27 +468,6 @@
 
         .form-input-container {
             position: relative;
-        }
-
-        .form-input-container .error-tip {
-            position: absolute;
-            top: 50%;
-            left: 12px;
-            transform: translateY(-50%);
-            color: #f25656;
-            font-weight: 700;
-            font-size: 14px;
-            pointer-events: none;
-            opacity: 0;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .form-input-container .error-tip.show {
-            opacity: 1;
-        }
-
-        .form-item input.error-active {
-            color: transparent !important;
         }
 
         .modal-actions {
@@ -772,17 +767,21 @@
                     <h3 class="modal-title">{{ modalTitle }}</h3>
                     <div class="form-row">
                         <div class="form-item full-width">
-                            <label>账号名称</label>
+                            <label>
+                                <span>账号名称</span>
+                                    <span v-if="nameError" class="label-error">请输入账号名称</span>
+                            </label>
                             <input type="text" v-model="modalForm.name" placeholder="例如: Github"
-                                :class="{ 'shake-it': nameError }" @input="nameError = false" ref="nameInput">
+                                @focus="nameError = false" ref="nameInput">
                         </div>
                         <div class="form-item full-width">
-                            <label>密钥 (Secret)</label>
+                            <label>
+                                <span>密钥</span>
+                                <span v-if="secretError" class="label-error">{{ secretErrorMsg }}</span>
+                            </label>
                             <div class="form-input-container">
-                                <input type="text" v-model="modalForm.secret" placeholder="请输入密钥"
-                                    :class="{ 'shake-it': secretError, 'error-active': secretError }"
-                                    @input="modalForm.secret = modalForm.secret.toUpperCase().replace(/\s/g, ''); secretError = false">
-                                <div class="error-tip" :class="{ show: secretError }">密钥不合法</div>
+                                <input type="text" v-model="modalForm.secret" placeholder="例如：A1B2C3D4..."
+                                    @focus="secretError = false">
                             </div>
                         </div>
 
@@ -791,7 +790,7 @@
                             <label>类型</label>
                             <div class="settings-select" :class="{ open: activeModalDropdown === 'type' }"
                                 @click.stop="activeModalDropdown = activeModalDropdown === 'type' ? null : 'type'">
-                                <span>{{ modalForm.type.toUpperCase() }}</span>
+                                <span>{{ modalForm.type === 'steam' ? 'Steam 令牌' : modalForm.type.toUpperCase() }}</span>
                                 <svg class="arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
@@ -913,7 +912,7 @@
                     <div class="modal-actions">
                         <button class="btn btn-secondary" @click="showModal = false"><span
                                 class="btn-text">取消</span></button>
-                        <button class="btn" @click="handleModalSubmit"><span class="btn-text">确定</span></button>
+                        <button class="btn" @click.stop.prevent="finalizeForm"><span class="btn-text">确定</span></button>
                     </div>
                 </div>
             </div>
@@ -983,7 +982,7 @@
         <div class="msg-toast" v-if="toastMsg">{{ toastMsg }}</div>
     </div>
     <script src="vue.global.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=2.05"></script>
 </body>
 
 </html>
