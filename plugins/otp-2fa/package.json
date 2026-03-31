@@ -1,7 +1,7 @@
 {
   "name": "otp-2fa",
   "version": "1.0.0",
-  "description": "专业的 2FA 验证码管理工具，支持 TOTP/HOTP/Steam 协议，具备实时预览、自动排序及置顶功能。",
+  "description": "安全、简约且高效的 2FA 令牌管理器，支持 TOTP/HOTP/Steam 多种协议。",
   "type": "module",
   "scripts": {
     "dev": "vite",
