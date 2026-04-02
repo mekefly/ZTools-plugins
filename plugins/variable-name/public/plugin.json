@@ -4,7 +4,7 @@
   "title": "起个变量名",
   "description": "使用百度翻译起变量名称",
   "author": "jeffrey",
-  "version": "1.0.02",
+  "version": "1.0.03",
   "main": "index.html",
   "preload": "preload/services.js",
   "logo": "logo.png",
