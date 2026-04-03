@@ -16,6 +16,16 @@ const formatDateTime = (date: Date) => {
 
 const inputValue = ref(props.launchParam.payload || new Date().getTime().toString())
 
+// 复制到剪贴板
+const copyToClipboard = async (text: string) => {
+  if (text === '-') return
+  try {
+    ztools.copyText(text)
+  } catch (err) {
+    console.error('复制失败:', err)
+  }
+}
+
 // 解析输入为 Date 对象
 const parsedDate = computed(() => {
   if (!inputValue.value) return null
@@ -86,6 +96,7 @@ const utcTime = computed(() => {
           <button
             class="copy-btn px-3 py-1 text-xs border border-gray-300 rounded hover:bg-blue-500 hover:text-white transition-colors cursor-pointer"
             :data-copy="localTimeFull"
+            @click="copyToClipboard(localTimeFull)"
           >
             复制
           </button>
@@ -100,6 +111,7 @@ const utcTime = computed(() => {
           <button
             class="copy-btn px-3 py-1 text-xs border border-gray-300 rounded hover:bg-blue-500 hover:text-white transition-colors cursor-pointer"
             :data-copy="localTimeDate"
+            @click="copyToClipboard(localTimeDate)"
           >
             复制
           </button>
@@ -114,6 +126,7 @@ const utcTime = computed(() => {
           <button
             class="copy-btn px-3 py-1 text-xs border border-gray-300 rounded hover:bg-blue-500 hover:text-white transition-colors cursor-pointer"
             :data-copy="timestampSeconds"
+            @click="copyToClipboard(timestampSeconds)"
           >
             复制
           </button>
@@ -128,6 +141,7 @@ const utcTime = computed(() => {
           <button
             class="copy-btn px-3 py-1 text-xs border border-gray-300 rounded hover:bg-blue-500 hover:text-white transition-colors cursor-pointer"
             :data-copy="timestampMilliseconds"
+            @click="copyToClipboard(timestampMilliseconds)"
           >
             复制
           </button>
@@ -142,6 +156,7 @@ const utcTime = computed(() => {
           <button
             class="copy-btn px-3 py-1 text-xs border border-gray-300 rounded hover:bg-blue-500 hover:text-white transition-colors cursor-pointer"
             :data-copy="utcTime"
+            @click="copyToClipboard(utcTime)"
           >
             复制
           </button>
