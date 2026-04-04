@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const emits = defineEmits([
   'update:show', 'update:showSelectMenu', 'update:showNextSelectMenu', 
-  'save-config', 'reset-database'
+  'save-config', 'reset-database', 'export-data', 'import-data', 'change-password'
 ])
 </script>
 
@@ -77,8 +77,15 @@ const emits = defineEmits([
           </div>
         </div>
 
-        <div class="settings-item">
-          <span class="settings-label">数据管理</span>
+        <div class="settings-item btn-grid">
+          <button class="btn setting-btn-align" @click="emits('export-data')">导出数据</button>
+          <span></span>
+          <button class="btn setting-btn-align btn-change-pwd" @click="emits('change-password')">修改主密码</button>
+        </div>
+
+        <div class="settings-item btn-grid">
+          <button class="btn setting-btn-align" @click="emits('import-data')">导入数据</button>
+          <span></span>
           <button class="btn btn-danger setting-btn-align" @click="emits('reset-database')">重置数据</button>
         </div>
 
@@ -89,3 +96,22 @@ const emits = defineEmits([
     </div>
   </transition>
 </template>
+
+<style scoped>
+.btn-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-change-pwd {
+  background: #7c3aed;
+  color: #ffffff !important;
+  border: none;
+}
+
+.btn-change-pwd:hover {
+  background: #6d28d9;
+}
+</style>

@@ -3,7 +3,7 @@ import {
   deriveKey, encryptSecret, decryptSecret, 
   generateSalt, exportKey, importKeyFromRaw, hashVerifier 
 } from '../utils/crypto'
-import { CONFIG_KEY } from '../constants'
+import { CONFIG_KEY, STORAGE_KEY } from '../constants'
 
 export function useAuth() {
   const masterKey = ref<CryptoKey | null>(null)
@@ -145,6 +145,85 @@ export function useAuth() {
     confirmPasswordInput.value = ''
   }
 
+  const changeMasterPassword = async (
+    currentPwd: string,
+    newPwd: string,
+    confirmPwd: string,
+    accounts: any[],
+    config: any,
+    onCurrentError: (msg: string) => void,
+    onNewError: (msg: string) => void,
+    onConfirmError: (msg: string) => void
+  ) => {
+    onCurrentError(''); onNewError(''); onConfirmError('')
+
+    // 验证新密码格式
+    if (newPwd.length < 4) { onNewError('密码长度至少为 4 位'); return }
+    if (newPwd !== confirmPwd) { onConfirmError('两次输入的密码不一致'); return }
+
+    const z = (window as any).ztools
+    try {
+      // 验证当前密码
+      if (!masterSalt.value) { onCurrentError('当前无主密码'); return }
+      const saltBuf = Uint8Array.from(atob(masterSalt.value), c => c.charCodeAt(0))
+      const testKey = await deriveKey(currentPwd, saltBuf)
+      const testRaw = await exportKey(testKey)
+      const doc = z.db.get(CONFIG_KEY)
+      const storedVerifier = doc?.verifier
+      if (!storedVerifier) { onCurrentError('配置数据异常'); return }
+      const testVerifier = await hashVerifier(testRaw)
+      if (testVerifier !== storedVerifier) { onCurrentError('当前密码错误'); return }
+
+      // 派生新密钥（复用原 salt）
+      const newKey = await deriveKey(newPwd, saltBuf)
+      const newRaw = await exportKey(newKey)
+      const hwKey = await getHardwareKey()
+      const hwEncrypted = await encryptSecret(newRaw, hwKey)
+      const newVerifier = await hashVerifier(newRaw)
+
+      // 重新加密所有账户，操作深拷贝避免污染内存数据
+      const { encryptSecret: enc, decryptSecret: dec } = await import('../utils/crypto')
+      const accountsToSave = JSON.parse(JSON.stringify(accounts))
+      for (const acc of accountsToSave) {
+        if (!acc.encrypted) {
+          acc.secret = await enc(acc.secret, newKey)
+          acc.encrypted = true
+        } else if (acc.secret.includes(':')) {
+          try {
+            const plain = await dec(acc.secret, testKey)
+            acc.secret = await enc(plain, newKey)
+          } catch (e) {
+            console.error('Re-encrypt failed for', acc.id, e)
+          }
+        }
+      }
+
+      // 保存账户
+      let existing = null
+      try { existing = z.db.get(STORAGE_KEY) } catch(e){}
+      z.db.put({
+        _id: STORAGE_KEY,
+        _rev: existing ? existing._rev : undefined,
+        data: accountsToSave
+      })
+
+      // 更新配置
+      z.db.put({
+        ...doc,
+        verifier: newVerifier,
+        hardwareEncryptedKey: hwEncrypted
+      })
+
+      masterKey.value = newKey
+      lastAuthTime.value = Date.now()
+      z.showNotification('主密码修改成功')
+      return true
+    } catch (e: any) {
+      onCurrentError(e.message || '修改失败')
+      return false
+    }
+  }
+
   return {
     masterKey, masterSalt, lastAuthTime,
     showSetPasswordModal, showVerifyPasswordModal,
@@ -152,6 +231,6 @@ export function useAuth() {
     passwordErrorMsg, verifyErrorMsg,
     verifyInput, pendingAction,
     tryAutoUnlock, setMasterPassword, verifyMasterPassword,
-    clearAuthData, getHardwareKey
+    clearAuthData, getHardwareKey, changeMasterPassword
   }
 }

@@ -4,6 +4,7 @@ import { getOTP, base32tohex } from './utils/otp'
 import { useAuth } from './composables/useAuth'
 import { useAccounts } from './composables/useAccounts'
 import { useTicker } from './composables/useTicker'
+import { useDataManagement } from './composables/useDataManagement'
 
 // Components
 import AccountCard from './components/AccountCard.vue'
@@ -12,6 +13,8 @@ import SetPasswordModal from './components/Modals/SetPasswordModal.vue'
 import SettingsModal from './components/Modals/SettingsModal.vue'
 import EditModal from './components/Modals/EditModal.vue'
 import ConfirmModal from './components/Modals/ConfirmModal.vue'
+import ImportDataModal from './components/Modals/ImportDataModal.vue'
+import ChangePasswordModal from './components/Modals/ChangePasswordModal.vue'
 import { STORAGE_KEY, CONFIG_KEY } from './constants'
 
 // --- Composables Initialization ---
@@ -22,7 +25,7 @@ const {
   passwordErrorMsg, verifyErrorMsg,
   verifyInput, pendingAction,
   tryAutoUnlock, setMasterPassword, verifyMasterPassword,
-  clearAuthData
+  clearAuthData, changeMasterPassword
 } = useAuth()
 
 const {
@@ -34,6 +37,11 @@ const {
   startTicker, stopTicker, updateAllTokens, updateTokens,
   getAccountTimeLeft, performTokenUpdate
 } = useTicker()
+
+const {
+  showImportModal, importDataInput, importPasswordInput, importDataError, importPasswordError,
+  exportData, importData, verifyAndApplyImportData, cancelImport
+} = useDataManagement()
 
 // --- Local UI State ---
 const config = ref({ timerStyle: 'bar', nextPreview: false })
@@ -68,6 +76,18 @@ const showSecret = ref(false)
 const showResetConfirmModal = ref(false)
 const countdown = ref(0)
 const countdownTimer = ref<any>(null)
+
+const showExportConfirmModal = ref(false)
+const exportCountdown = ref(0)
+const exportCountdownTimer = ref<any>(null)
+
+const showChangePasswordModal = ref(false)
+const changePwdCurrentError = ref('')
+const changePwdNewError = ref('')
+const changePwdConfirmError = ref('')
+let changePwdCurrent = ''
+let changePwdNew = ''
+let changePwdConfirm = ''
 
 const dragIndex = ref<number | null>(null)
 const isDragging = ref(false)
@@ -112,6 +132,89 @@ const initialize = async () => {
 const handleResetDatabase = () => {
   showResetConfirmModal.value = true
   startCountdown()
+}
+
+const handleExportData = async () => {
+  if (!masterSalt.value) {
+    passwordInput.value = ''
+    verifyErrorMsg.value = ''
+    showVerifyPasswordModal.value = true
+    pendingAction.value = handleExportData
+    return
+  }
+  
+  if (!masterKey.value) {
+    await tryAutoUnlock()
+    if (!masterKey.value) {
+      pendingAction.value = handleExportData
+      showVerifyPasswordModal.value = true
+      return
+    }
+  }
+
+  // 弹出确认框，开始倒计时
+  showExportConfirmModal.value = true
+  exportCountdown.value = 3
+  if (exportCountdownTimer.value) clearInterval(exportCountdownTimer.value)
+  exportCountdownTimer.value = setInterval(() => {
+    if (exportCountdown.value > 0) exportCountdown.value--
+    else { clearInterval(exportCountdownTimer.value); exportCountdownTimer.value = null }
+  }, 1000)
+}
+
+const confirmExport = async () => {
+  showExportConfirmModal.value = false
+  await exportData(accounts.value, masterSalt.value, masterKey.value)
+}
+
+const handleImportData = async () => {
+  importData()
+}
+
+const handleChangePassword = () => {
+  if (!masterSalt.value) {
+    const z = (window as any).ztools
+    z?.showNotification?.('尚未设置主密码')
+    return
+  }
+  changePwdCurrentError.value = ''
+  changePwdNewError.value = ''
+  changePwdConfirmError.value = ''
+  showChangePasswordModal.value = true
+}
+
+const handleChangePasswordSubmit = async () => {
+  const result = await changeMasterPassword(
+    changePwdCurrent,
+    changePwdNew,
+    changePwdConfirm,
+    accounts.value,
+    config.value,
+    (msg) => { changePwdCurrentError.value = msg },
+    (msg) => { changePwdNewError.value = msg },
+    (msg) => { changePwdConfirmError.value = msg }
+  )
+  if (result) showChangePasswordModal.value = false
+}
+const handleImportPasswordVerify = async () => {
+  if (!importDataInput.value) {
+    importDataError.value = '数据不能为空'
+    return
+  }
+  
+  if (!importPasswordInput.value) {
+    importPasswordError.value = '主密码不能为空'
+    return
+  }
+  
+  await verifyAndApplyImportData(
+    importDataInput.value,
+    importPasswordInput.value,
+    accounts.value,
+    masterSalt,
+    masterKey,
+    config.value
+  )
 }
 
 const startCountdown = () => {
@@ -405,6 +508,9 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       :config="config"
       @save-config="saveConfig(config)"
       @reset-database="handleResetDatabase"
+      @export-data="handleExportData"
+      @import-data="handleImportData"
+      @change-password="handleChangePassword"
     />
 
     <EditModal 
@@ -439,6 +545,28 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       @focus="verifyErrorMsg = ''"
     />
 
+    <ImportDataModal 
+      v-model:show="showImportModal"
+      v-model:dataInput="importDataInput"
+      v-model:passwordInput="importPasswordInput"
+      :dataError="importDataError"
+      :passwordError="importPasswordError"
+      @verify="handleImportPasswordVerify"
+      @cancel="cancelImport"
+    />
+
+    <ChangePasswordModal
+      v-model:show="showChangePasswordModal"
+      :currentError="changePwdCurrentError"
+      :newError="changePwdNewError"
+      :confirmError="changePwdConfirmError"
+      @update:currentPassword="changePwdCurrent = $event"
+      @update:newPassword="changePwdNew = $event"
+      @update:confirmPassword="changePwdConfirm = $event"
+      @submit="handleChangePasswordSubmit"
+      @cancel="showChangePasswordModal = false"
+    />
+
     <ConfirmModal 
       v-model:show="showConfirm"
       title="要删除该账号吗？"
@@ -464,6 +592,18 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       :countdown="countdown"
       @confirm="confirmReset"
       @cancel="showResetConfirmModal = false"
+    />
+
+    <ConfirmModal
+      v-model:show="showExportConfirmModal"
+      title="确定要导出数据吗？"
+      tip="导出的数据使用当前主密码进行加密，导入时也需要主密码进行解密，请牢记你的主密码"
+      confirmText="导出"
+      cancelText="取消"
+      :isDanger="false"
+      :countdown="exportCountdown"
+      @confirm="confirmExport"
+      @cancel="showExportConfirmModal = false"
     />
 
     <!-- About Modal -->

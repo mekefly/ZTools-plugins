@@ -28,6 +28,7 @@ const emits = defineEmits(['update:show', 'confirm', 'cancel'])
             :class="{ 'btn-confirm-delete': isDanger, 'btn-primary': !isDanger, 'disabled': (countdown || 0) > 0 }" 
             :disabled="(countdown || 0) > 0" 
             @click="emits('confirm')"
+            style="min-width: 90px;"
           >
             <span class="btn-text">
               {{ confirmText }}{{ (countdown || 0) > 0 ? ` (${countdown}s)` : '' }}
