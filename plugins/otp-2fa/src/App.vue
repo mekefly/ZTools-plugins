@@ -189,7 +189,6 @@ const handleChangePasswordSubmit = async () => {
     changePwdNew,
     changePwdConfirm,
     accounts.value,
-    config.value,
     (msg) => { changePwdCurrentError.value = msg },
     (msg) => { changePwdNewError.value = msg },
     (msg) => { changePwdConfirmError.value = msg }

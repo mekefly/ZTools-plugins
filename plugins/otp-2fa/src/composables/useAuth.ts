@@ -1,4 +1,4 @@
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 import { 
   deriveKey, encryptSecret, decryptSecret, 
   generateSalt, exportKey, importKeyFromRaw, hashVerifier 
@@ -150,7 +150,6 @@ export function useAuth() {
     newPwd: string,
     confirmPwd: string,
     accounts: any[],
-    config: any,
     onCurrentError: (msg: string) => void,
     onNewError: (msg: string) => void,
     onConfirmError: (msg: string) => void
@@ -182,16 +181,15 @@ export function useAuth() {
       const newVerifier = await hashVerifier(newRaw)
 
       // 重新加密所有账户，操作深拷贝避免污染内存数据
-      const { encryptSecret: enc, decryptSecret: dec } = await import('../utils/crypto')
       const accountsToSave = JSON.parse(JSON.stringify(accounts))
       for (const acc of accountsToSave) {
         if (!acc.encrypted) {
-          acc.secret = await enc(acc.secret, newKey)
+          acc.secret = await encryptSecret(acc.secret, newKey)
           acc.encrypted = true
         } else if (acc.secret.includes(':')) {
           try {
-            const plain = await dec(acc.secret, testKey)
-            acc.secret = await enc(plain, newKey)
+            const plain = await decryptSecret(acc.secret, testKey)
+            acc.secret = await encryptSecret(plain, newKey)
           } catch (e) {
             console.error('Re-encrypt failed for', acc.id, e)
           }

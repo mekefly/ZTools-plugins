@@ -148,7 +148,15 @@ export function useDataManagement() {
         return
       }
 
-      // 8. 解密账户列表
+      // 8. 校验结构通过，直接使用导出时已加密的账户数据
+      // importedData.accounts 在导出时已用主密钥加密，无需解密后再存储
+      const encryptedAccounts = importedData.accounts
+
+      // 9. 应用数据：内存中保持解密状态供 UI 使用
+      masterSalt.value = saltBase64
+      masterKey.value = derivedKey
+
+      // 解密账户供内存使用
       const decryptedAccounts = JSON.parse(JSON.stringify(importedData.accounts))
       for (const acc of decryptedAccounts) {
         if (acc.encrypted && acc.secret.includes(':')) {
@@ -160,10 +168,6 @@ export function useDataManagement() {
           }
         }
       }
-
-      // 9. 应用数据
-      masterSalt.value = saltBase64
-      masterKey.value = derivedKey
 
       accounts.length = 0
       accounts.push(...decryptedAccounts)
@@ -179,12 +183,13 @@ export function useDataManagement() {
         nextPreview: config.nextPreview || false
       })
 
+      // 数据库存储加密后的原始数据
       let existing = null
       try { existing = z.db.get(STORAGE_KEY) } catch(e){}
       z.db.put({
         _id: STORAGE_KEY,
         _rev: existing ? existing._rev : undefined,
-        data: decryptedAccounts
+        data: encryptedAccounts
       })
 
       showImportModal.value = false

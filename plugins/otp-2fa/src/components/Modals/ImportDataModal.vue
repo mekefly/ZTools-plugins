@@ -22,21 +22,6 @@ watch(() => props.show, (newVal) => {
   }
 })
 
-watch(() => props.dataInput, (newVal) => {
-  // 实时验证Base64格式
-  if (newVal.trim()) {
-    validateBase64(newVal.trim())
-  }
-})
-
-const validateBase64 = (data: string) => {
-  // Base64正则表达式：只包含A-Z, a-z, 0-9, +, /, =, :（冒号用于分隔IV和密文）
-  const base64Regex = /^[A-Za-z0-9+/=:]*$/
-  if (!base64Regex.test(data)) {
-    emits('update:dataInput', data) // 保持输入
-  }
-}
-
 const handleSubmit = () => {
   emits('verify')
 }
