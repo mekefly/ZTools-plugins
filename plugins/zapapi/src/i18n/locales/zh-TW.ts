@@ -26,9 +26,6 @@ export default {
     collections: '集合',
     newRequest: '新請求',
     saved: '已儲存',
-    importSuccess: '集合匯入成功',
-    envImportSuccess: '環境匯入成功',
-    importFail: '匯入失敗，檔案格式錯誤',
     envManagerTitle: '環境管理',
     codeGeneratorTitle: '產生程式碼',
     collectionManagerTitle: '集合管理'
@@ -83,7 +80,29 @@ export default {
     addField: '新增欄位',
     headerPlaceholder: 'Header 名',
     noAuth: '此請求未使用認證',
-    noBody: '此請求未使用請求體'
+    noBody: '此請求未使用請求體',
+    cancel: '取消請求'
+  },
+
+  tabs: {
+    newTab: '新建分頁',
+    untitledRequest: '新請求',
+    renameTitle: '重新命名分頁',
+    renamePlaceholder: '輸入分頁名稱',
+    resizeDialog: '調整重新命名彈窗大小',
+    scrollLeft: '向左捲動分頁',
+    scrollRight: '向右捲動分頁',
+    closeCurrent: '關閉分頁',
+    closeOthers: '關閉其他分頁',
+    closeRight: '關閉右側分頁',
+    duplicate: '複製分頁',
+    copySuffix: '副本',
+    unsavedTitle: '有未儲存的修改',
+    unsavedMsgSingle: '此分頁有未儲存內容，確定仍要關閉嗎？',
+    unsavedMsgBatch: '即將關閉 {count} 個有未儲存修改的分頁，確定繼續嗎？',
+    closeAnyway: '仍要關閉',
+    saveNeedCollection: '請先建立或選擇一個集合再儲存',
+    savedAsNewRequest: '已儲存為新請求'
   },
 
   response: {
@@ -97,7 +116,32 @@ export default {
     raw: 'Raw',
     statusLabel: '狀態',
     timeLabel: '時間',
-    sizeLabel: '大小'
+    sizeLabel: '大小',
+    searchPlaceholder: '搜尋 JSON 欄位/值/路徑',
+    download: '下載回應',
+    copyField: '複製欄位',
+    copyKey: '複製鍵名',
+    copyPath: '複製路徑',
+    copyValue: '複製值',
+    toggleNode: '展開或摺疊節點',
+    binaryDetected: '偵測到二進位回應',
+    imagePreview: '圖片預覽',
+    noInlinePreview: '此二進位類型不支援內嵌預覽，請下載查看',
+    noSearchResult: '沒有符合的 JSON 結果',
+    cookies: 'Cookies',
+    modeJson: 'JSON',
+    modeXml: 'XML',
+    modeHtml: 'HTML',
+    modeJs: 'JavaScript',
+    modeRaw: 'Raw',
+    modeHex: 'Hex',
+    modeBase64: 'Base64',
+    preview: '預覽',
+    filter: '篩選',
+    search: '搜尋',
+    filterPlaceholder: '篩選',
+    copy: '複製',
+    noCookies: '暫無 Cookies'
   },
 
   env: {
@@ -108,9 +152,7 @@ export default {
     varName: '變數名',
     value: '值',
     selectEnv: '選擇一個環境進行編輯',
-    defaultName: '環境',
-    exported: '環境 "{name}" 已匯出',
-    allExported: '環境已匯出'
+    defaultName: '環境'
   },
 
   collection: {
@@ -119,9 +161,7 @@ export default {
     requests: '請求',
     noCollections: '尚無集合，點擊上方按鈕建立',
     defaultName: '集合',
-    confirmDelete: '確定要刪除這個集合嗎？',
-    exported: '集合 "{name}" 已匯出',
-    allExported: '集合已匯出'
+    confirmDelete: '確定要刪除這個集合嗎？'
   },
 
   code: {

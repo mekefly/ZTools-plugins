@@ -17,31 +17,6 @@
       "explain": "API 测试工具，支持请求构建、响应查看、集合管理、环境管理",
       "icon": "logo.png",
       "cmds": ["api test", "send request", "接口测试", "发送请求"]
-    },
-    {
-      "code": "import",
-      "explain": "导入集合或环境配置文件",
-      "icon": "logo.png",
-      "cmds": [
-        {
-          "type": "files",
-          "fileType": "file",
-          "maxLength": 1,
-          "label": "导入 ZapApi 配置"
-        }
-      ]
-    },
-    {
-      "code": "write",
-      "explain": "导出集合或环境为文件",
-      "icon": "logo.png",
-      "mainHide": true,
-      "cmds": [
-        {
-          "type": "over",
-          "label": "导出为文件"
-        }
-      ]
     }
   ]
 }

@@ -13,12 +13,12 @@
     <div
       ref="tooltipRef"
       class="ui-tooltip"
-      :class="[`ui-tooltip--${placement}`, { 'ui-tooltip--show': visible }]"
+      :class="[`ui-tooltip--${currentPlacement}`, { 'ui-tooltip--show': visible }]"
       :style="tooltipStyle"
       role="tooltip"
     >
       <slot name="content">{{ content }}</slot>
-      <div class="ui-tooltip__arrow" :class="`ui-tooltip__arrow--${placement}`" />
+      <div class="ui-tooltip__arrow" :class="`ui-tooltip__arrow--${currentPlacement}`" />
     </div>
   </Teleport>
 </template>
@@ -39,11 +39,14 @@ const props = withDefaults(defineProps<{
 })
 
 const triggerRef = ref<HTMLElement | null>(null)
+const tooltipRef = ref<HTMLElement | null>(null)
 const visible = ref(false)
+const currentPlacement = ref<'top' | 'bottom' | 'left' | 'right'>(props.placement)
 const tooltipStyle = ref<Record<string, string>>({
   position: 'fixed',
   top: '0',
   left: '0',
+  transform: 'none',
   zIndex: '99998',
   visibility: 'hidden'
 })
@@ -51,50 +54,128 @@ const tooltipStyle = ref<Record<string, string>>({
 let showTimer: ReturnType<typeof setTimeout> | null = null
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
+const GAP = 8
+const SAFE_MARGIN = 8
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min
+  }
+  return Math.min(max, Math.max(min, value))
+}
+
+function calcPosition(
+  placement: 'top' | 'bottom' | 'left' | 'right',
+  triggerRect: DOMRect,
+  tooltipRect: DOMRect
+): { top: number; left: number } {
+  switch (placement) {
+    case 'top':
+      return {
+        top: triggerRect.top - GAP - tooltipRect.height,
+        left: triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2
+      }
+    case 'bottom':
+      return {
+        top: triggerRect.bottom + GAP,
+        left: triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2
+      }
+    case 'left':
+      return {
+        top: triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2,
+        left: triggerRect.left - GAP - tooltipRect.width
+      }
+    case 'right':
+      return {
+        top: triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2,
+        left: triggerRect.right + GAP
+      }
+  }
+}
+
+function getFallbackPlacement(
+  placement: 'top' | 'bottom' | 'left' | 'right'
+): 'top' | 'bottom' | 'left' | 'right' {
+  if (placement === 'top') return 'bottom'
+  if (placement === 'bottom') return 'top'
+  if (placement === 'left') return 'right'
+  return 'left'
+}
+
 function positionTooltip() {
   const trigger = triggerRef.value
-  if (!trigger) return
+  const tooltip = tooltipRef.value
+  if (!trigger || !tooltip) return
 
-  const rect = trigger.getBoundingClientRect()
-  if (rect.width === 0 || rect.height === 0) return
+  const triggerRect = trigger.getBoundingClientRect()
+  if (triggerRect.width === 0 || triggerRect.height === 0) return
 
-  const gap = 8
-  let top = 0, left = 0, tx = '', ty = ''
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const maxAllowedWidth = Math.max(160, viewportWidth - SAFE_MARGIN * 2)
 
-  switch (props.placement) {
-    case 'top':
-      top = rect.top - gap
-      left = rect.left + rect.width / 2
-      tx = '-50%'
-      ty = '-100%'
-      break
-    case 'bottom':
-      top = rect.bottom + gap
-      left = rect.left + rect.width / 2
-      tx = '-50%'
-      ty = '0'
-      break
-    case 'left':
-      top = rect.top + rect.height / 2
-      left = rect.left - gap
-      tx = '-100%'
-      ty = '-50%'
-      break
-    case 'right':
-      top = rect.top + rect.height / 2
-      left = rect.right + gap
-      tx = '0'
-      ty = '-50%'
-      break
+  tooltipStyle.value = {
+    position: 'fixed',
+    top: '0px',
+    left: '0px',
+    transform: 'none',
+    zIndex: '99998',
+    visibility: 'hidden',
+    maxWidth: `${maxAllowedWidth}px`,
+    whiteSpace: 'nowrap'
   }
+
+  let tooltipRect = tooltip.getBoundingClientRect()
+  const shouldWrap = tooltipRect.width > maxAllowedWidth
+  if (shouldWrap) {
+    tooltipStyle.value = {
+      ...tooltipStyle.value,
+      whiteSpace: 'normal'
+    }
+    tooltipRect = tooltip.getBoundingClientRect()
+  }
+
+  let placement = props.placement
+  let { top, left } = calcPosition(placement, triggerRect, tooltipRect)
+
+  const overTop = top < SAFE_MARGIN
+  const overBottom = top + tooltipRect.height > viewportHeight - SAFE_MARGIN
+  const overLeft = left < SAFE_MARGIN
+  const overRight = left + tooltipRect.width > viewportWidth - SAFE_MARGIN
+
+  if (
+    (placement === 'top' && overTop) ||
+    (placement === 'bottom' && overBottom) ||
+    (placement === 'left' && overLeft) ||
+    (placement === 'right' && overRight)
+  ) {
+    placement = getFallbackPlacement(placement)
+    const fallbackPos = calcPosition(placement, triggerRect, tooltipRect)
+    top = fallbackPos.top
+    left = fallbackPos.left
+  }
+
+  top = clamp(top, SAFE_MARGIN, viewportHeight - SAFE_MARGIN - tooltipRect.height)
+  left = clamp(left, SAFE_MARGIN, viewportWidth - SAFE_MARGIN - tooltipRect.width)
+
+  const triggerCenterX = triggerRect.left + triggerRect.width / 2
+  const triggerCenterY = triggerRect.top + triggerRect.height / 2
+  const arrowX = clamp(triggerCenterX - left, 10, tooltipRect.width - 10)
+  const arrowY = clamp(triggerCenterY - top, 10, tooltipRect.height - 10)
+
+  currentPlacement.value = placement
 
   tooltipStyle.value = {
     position: 'fixed',
     top: `${top}px`,
     left: `${left}px`,
-    transform: `translate(${tx}, ${ty})`,
+    transform: 'none',
     zIndex: '99998',
-    visibility: 'visible'
+    visibility: 'visible',
+    maxWidth: `${maxAllowedWidth}px`,
+    whiteSpace: shouldWrap ? 'normal' : 'nowrap',
+    '--arrow-x': `${arrowX}px`,
+    '--arrow-y': `${arrowY}px`
   }
 }
 
@@ -127,6 +208,18 @@ watch(visible, (val) => {
   }
 })
 
+watch(
+  () => props.placement,
+  (next) => {
+    currentPlacement.value = next
+    if (visible.value) {
+      requestAnimationFrame(() => {
+        positionTooltip()
+      })
+    }
+  }
+)
+
 onMounted(() => {
   window.addEventListener('scroll', updatePosition, true)
   window.addEventListener('resize', updatePosition)
@@ -149,6 +242,8 @@ function updatePosition() {
 .ui-tooltip-trigger {
   display: inline-flex;
   position: relative;
+  flex: 0 0 auto;
+  width: fit-content;
 }
 </style>
 
@@ -163,9 +258,10 @@ function updatePosition() {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
-  max-width: 220px;
-  white-space: normal;
-  word-break: break-word;
+  max-width: min(320px, calc(100vw - 16px));
+  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-break: normal;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -185,7 +281,7 @@ function updatePosition() {
 
 .ui-tooltip__arrow--top {
   bottom: -5px;
-  left: 50%;
+  left: var(--arrow-x, 50%);
   transform: translateX(-50%) rotate(45deg);
   border-left: none;
   border-top: none;
@@ -193,7 +289,7 @@ function updatePosition() {
 
 .ui-tooltip__arrow--bottom {
   top: -5px;
-  left: 50%;
+  left: var(--arrow-x, 50%);
   transform: translateX(-50%) rotate(45deg);
   border-right: none;
   border-bottom: none;
@@ -201,7 +297,7 @@ function updatePosition() {
 
 .ui-tooltip__arrow--left {
   right: -5px;
-  top: 50%;
+  top: var(--arrow-y, 50%);
   transform: translateY(-50%) rotate(45deg);
   border-left: none;
   border-bottom: none;
@@ -209,7 +305,7 @@ function updatePosition() {
 
 .ui-tooltip__arrow--right {
   left: -5px;
-  top: 50%;
+  top: var(--arrow-y, 50%);
   transform: translateY(-50%) rotate(45deg);
   border-right: none;
   border-top: none;

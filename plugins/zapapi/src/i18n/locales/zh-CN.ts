@@ -26,9 +26,6 @@ export default {
     collections: '集合',
     newRequest: '新请求',
     saved: '已保存',
-    importSuccess: '集合导入成功',
-    envImportSuccess: '环境导入成功',
-    importFail: '导入失败，文件格式错误',
     envManagerTitle: '环境管理',
     codeGeneratorTitle: '生成代码',
     collectionManagerTitle: '集合管理'
@@ -83,7 +80,29 @@ export default {
     addField: '添加字段',
     headerPlaceholder: 'Header 名',
     noAuth: '此请求未使用认证',
-    noBody: '此请求未使用请求体'
+    noBody: '此请求未使用请求体',
+    cancel: '取消请求'
+  },
+
+  tabs: {
+    newTab: '新建标签页',
+    untitledRequest: '新请求',
+    renameTitle: '重命名标签页',
+    renamePlaceholder: '输入标签页名称',
+    resizeDialog: '调整重命名弹窗大小',
+    scrollLeft: '向左滚动标签',
+    scrollRight: '向右滚动标签',
+    closeCurrent: '关闭标签页',
+    closeOthers: '关闭其他标签页',
+    closeRight: '关闭右侧标签页',
+    duplicate: '复制标签页',
+    copySuffix: '副本',
+    unsavedTitle: '存在未保存修改',
+    unsavedMsgSingle: '该标签页有未保存内容，确定仍要关闭吗？',
+    unsavedMsgBatch: '即将关闭 {count} 个有未保存修改的标签页，确定继续吗？',
+    closeAnyway: '仍然关闭',
+    saveNeedCollection: '请先创建或选择一个集合再保存',
+    savedAsNewRequest: '已保存为新请求'
   },
 
   response: {
@@ -97,7 +116,32 @@ export default {
     raw: 'Raw',
     statusLabel: '状态',
     timeLabel: '时间',
-    sizeLabel: '大小'
+    sizeLabel: '大小',
+    searchPlaceholder: '搜索 JSON 字段/值/路径',
+    download: '下载响应',
+    copyField: '复制字段',
+    copyKey: '复制键名',
+    copyPath: '复制路径',
+    copyValue: '复制值',
+    toggleNode: '展开或折叠节点',
+    binaryDetected: '检测到二进制响应',
+    imagePreview: '图片预览',
+    noInlinePreview: '该二进制类型不支持内联预览，请下载查看',
+    noSearchResult: '没有匹配的 JSON 结果',
+    cookies: 'Cookies',
+    modeJson: 'JSON',
+    modeXml: 'XML',
+    modeHtml: 'HTML',
+    modeJs: 'JavaScript',
+    modeRaw: 'Raw',
+    modeHex: 'Hex',
+    modeBase64: 'Base64',
+    preview: '预览',
+    filter: '过滤',
+    search: '搜索',
+    filterPlaceholder: '过滤',
+    copy: '复制',
+    noCookies: '暂无 Cookies'
   },
 
   env: {
@@ -108,9 +152,7 @@ export default {
     varName: '变量名',
     value: '值',
     selectEnv: '选择一个环境进行编辑',
-    defaultName: '环境',
-    exported: '环境 "{name}" 已导出',
-    allExported: '环境已导出'
+    defaultName: '环境'
   },
 
   collection: {
@@ -119,9 +161,7 @@ export default {
     requests: '请求',
     noCollections: '暂无集合，点击上方按钮创建',
     defaultName: '集合',
-    confirmDelete: '确定要删除这个集合吗？',
-    exported: '集合 "{name}" 已导出',
-    allExported: '集合已导出'
+    confirmDelete: '确定要删除这个集合吗？'
   },
 
   code: {

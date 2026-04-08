@@ -24,13 +24,6 @@
           <UiBadge variant="info" size="sm">{{ collection.requests.length }} {{ t('collection.requests') }}</UiBadge>
         </div>
         <div class="collection-card__actions">
-          <UiTooltip :content="t('common.export')" placement="bottom">
-            <UiButton variant="ghost" size="xs" icon-only @click="exportCollection(collection)">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </UiButton>
-          </UiTooltip>
           <UiTooltip :content="t('common.delete')" placement="bottom">
             <UiButton variant="danger" size="xs" icon-only @click="deleteCollection(collection.id)">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -105,19 +98,6 @@ function confirmDelete() {
   }
 }
 
-function exportCollection(collection: Collection) {
-  const json = JSON.stringify([collection], null, 2)
-  window.services.writeJsonFile(json, `collection-${collection.name}.json`)
-  window.ztools.showTip(t('collection.exported', { name: collection.name }))
-}
-
-function exportAllCollections() {
-  const json = collectionsStore.exportCollections()
-  window.services.writeJsonFile(json, 'collections.json')
-  window.ztools.showTip(t('collection.allExported'))
-}
-
-defineExpose({ exportAllCollections })
 </script>
 
 <style scoped>

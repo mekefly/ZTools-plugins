@@ -3,25 +3,40 @@ export function resolveVariables(
   variables: Record<string, string>,
   collectionVariables: Record<string, string> = {}
 ): string {
-  if (!text) return text
+  if (!text) {
+    return text
+  }
 
   const allVars = { ...collectionVariables, ...variables }
+  let randomUuid = Date.now().toString(36) + Math.random().toString(36).substring(2)
+  if (typeof crypto.randomUUID === 'function') {
+    randomUuid = crypto.randomUUID()
+  }
 
   const builtInVars: Record<string, string> = {
     $timestamp: Date.now().toString(),
-    $randomUUID: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2),
+    $randomUUID: randomUuid,
     $isoTimestamp: new Date().toISOString()
   }
 
   return text.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
     const trimmedKey = key.trim()
-    if (builtInVars[trimmedKey]) return builtInVars[trimmedKey]
-    if (allVars[trimmedKey] !== undefined) return allVars[trimmedKey]
+    if (builtInVars[trimmedKey] !== undefined) {
+      return builtInVars[trimmedKey]
+    }
+    if (allVars[trimmedKey] !== undefined) {
+      return allVars[trimmedKey]
+    }
+
     return match
   })
 }
 
-export function resolveAllVariables(obj: unknown, variables: Record<string, string>, collectionVariables: Record<string, string> = {}): unknown {
+export function resolveAllVariables(
+  obj: unknown,
+  variables: Record<string, string>,
+  collectionVariables: Record<string, string> = {}
+): unknown {
   if (typeof obj === 'string') {
     return resolveVariables(obj, variables, collectionVariables)
   }

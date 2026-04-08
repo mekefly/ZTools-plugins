@@ -8,32 +8,38 @@ interface SettingsState {
 
 const STORAGE_KEY = 'zapapi-settings'
 
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'system' || value === 'dark' || value === 'light'
+}
+
 function loadSettings(): SettingsState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
       return {
-        theme: ['system', 'dark', 'light'].includes(parsed.theme) ? parsed.theme : 'system'
+        theme: isThemeMode(parsed.theme) ? parsed.theme : 'system'
       }
     }
   } catch {}
+
   return { theme: 'system' }
 }
 
-function saveSettings(state: SettingsState) {
+function saveSettings(state: SettingsState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {}
 }
 
-function applyTheme(theme: ThemeMode) {
+function applyTheme(theme: ThemeMode): void {
   const root = document.documentElement
   if (theme === 'system') {
     root.removeAttribute('data-theme')
-  } else {
-    root.setAttribute('data-theme', theme)
+    return
   }
+
+  root.setAttribute('data-theme', theme)
 }
 
 function getSystemTheme(): 'dark' | 'light' {
@@ -51,7 +57,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 })
 
 export function useSettingsStore() {
-  function setTheme(theme: ThemeMode) {
+  function setTheme(theme: ThemeMode): void {
     state.value.theme = theme
     applyTheme(theme)
     saveSettings(state.value)
@@ -65,6 +71,7 @@ export function useSettingsStore() {
     if (state.value.theme === 'system') {
       return getSystemTheme()
     }
+
     return state.value.theme
   }
 

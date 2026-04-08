@@ -26,9 +26,6 @@ export default {
     collections: 'Collections',
     newRequest: 'New Request',
     saved: 'Saved',
-    importSuccess: 'Collection imported successfully',
-    envImportSuccess: 'Environment imported successfully',
-    importFail: 'Import failed, invalid file format',
     envManagerTitle: 'Environment Manager',
     codeGeneratorTitle: 'Generate Code',
     collectionManagerTitle: 'Collection Manager'
@@ -83,7 +80,29 @@ export default {
     addField: 'Add Field',
     headerPlaceholder: 'Header name',
     noAuth: 'This request does not use authentication',
-    noBody: 'This request does not have a body'
+    noBody: 'This request does not have a body',
+    cancel: 'Cancel Request'
+  },
+
+  tabs: {
+    newTab: 'New Tab',
+    untitledRequest: 'New Request',
+    renameTitle: 'Rename Tab',
+    renamePlaceholder: 'Enter tab name',
+    resizeDialog: 'Resize rename dialog',
+    scrollLeft: 'Scroll tabs left',
+    scrollRight: 'Scroll tabs right',
+    closeCurrent: 'Close Tab',
+    closeOthers: 'Close Other Tabs',
+    closeRight: 'Close Tabs to the Right',
+    duplicate: 'Duplicate Tab',
+    copySuffix: 'Copy',
+    unsavedTitle: 'Unsaved changes',
+    unsavedMsgSingle: 'This tab has unsaved changes. Close anyway?',
+    unsavedMsgBatch: '{count} tabs have unsaved changes. Close anyway?',
+    closeAnyway: 'Close Anyway',
+    saveNeedCollection: 'Create or select a collection before saving',
+    savedAsNewRequest: 'Saved as a new request'
   },
 
   response: {
@@ -97,7 +116,32 @@ export default {
     raw: 'Raw',
     statusLabel: 'Status',
     timeLabel: 'Time',
-    sizeLabel: 'Size'
+    sizeLabel: 'Size',
+    searchPlaceholder: 'Search JSON key/value/path',
+    download: 'Download',
+    copyField: 'Copy field',
+    copyKey: 'Copy key',
+    copyPath: 'Copy path',
+    copyValue: 'Copy value',
+    toggleNode: 'Toggle node',
+    binaryDetected: 'Binary response detected',
+    imagePreview: 'Image preview',
+    noInlinePreview: 'Inline preview is not supported for this binary type. Download to view.',
+    noSearchResult: 'No matching JSON result',
+    cookies: 'Cookies',
+    modeJson: 'JSON',
+    modeXml: 'XML',
+    modeHtml: 'HTML',
+    modeJs: 'JavaScript',
+    modeRaw: 'Raw',
+    modeHex: 'Hex',
+    modeBase64: 'Base64',
+    preview: 'Preview',
+    filter: 'Filter',
+    search: 'Search',
+    filterPlaceholder: 'Filter',
+    copy: 'Copy',
+    noCookies: 'No cookies'
   },
 
   env: {
@@ -108,9 +152,7 @@ export default {
     varName: 'Variable name',
     value: 'Value',
     selectEnv: 'Select an environment to edit',
-    defaultName: 'Environment',
-    exported: 'Environment "{name}" exported',
-    allExported: 'Environments exported'
+    defaultName: 'Environment'
   },
 
   collection: {
@@ -119,9 +161,7 @@ export default {
     requests: 'requests',
     noCollections: 'No collections, click the button above to create one',
     defaultName: 'Collection',
-    confirmDelete: 'Are you sure you want to delete this collection?',
-    exported: 'Collection "{name}" exported',
-    allExported: 'Collections exported'
+    confirmDelete: 'Are you sure you want to delete this collection?'
   },
 
   code: {

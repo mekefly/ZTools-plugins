@@ -29,6 +29,7 @@
             class="ui-table-editor__input"
             :value="row.key"
             :placeholder="keyPlaceholder"
+            :list="keyDatalistId"
             @input="onInput(index, 'key', ($event.target as HTMLInputElement).value)"
             @focus="onFocus(index)"
           />
@@ -38,6 +39,7 @@
             class="ui-table-editor__input"
             :value="row.value"
             :placeholder="valuePlaceholder"
+            :list="getValueDatalistId(index)"
             @input="onInput(index, 'value', ($event.target as HTMLInputElement).value)"
           />
         </div>
@@ -56,6 +58,17 @@
         </div>
       </div>
     </div>
+    <datalist v-if="normalizedSuggestions.length > 0" :id="keyDatalistId">
+      <option v-for="item in normalizedSuggestions" :key="item" :value="item"></option>
+    </datalist>
+    <template v-for="(_, index) in rows" :key="`value-suggestions-${index}`">
+      <datalist
+        v-if="getValueSuggestionsByRow(index).length > 0"
+        :id="getValueDatalistId(index) || ''"
+      >
+        <option v-for="item in getValueSuggestionsByRow(index)" :key="item" :value="item"></option>
+      </datalist>
+    </template>
   </div>
 </template>
 
@@ -75,22 +88,58 @@ const props = withDefaults(defineProps<{
   valuePlaceholder?: string
   keyLabel?: string
   valueLabel?: string
+  keySuggestions?: string[]
+  suggestionScope?: string
+  suggestionLimit?: number
+  valueSuggestionsMap?: Record<string, string[]>
+  valueSuggestionScope?: string
+  valueSuggestionLimit?: number
 }>(), {
   keyPlaceholder: 'Key',
   valuePlaceholder: 'Value',
   keyLabel: 'Key',
-  valueLabel: 'Value'
+  valueLabel: 'Value',
+  keySuggestions: () => [],
+  suggestionScope: 'default',
+  suggestionLimit: 200,
+  valueSuggestionsMap: () => ({}),
+  valueSuggestionScope: 'default',
+  valueSuggestionLimit: 200
 })
 
 const emit = defineEmits<{
   'update:rows': [rows: KVRow[]]
 }>()
 
+const keyDatalistId = `ui-table-editor-keys-${props.suggestionScope}-${Math.random().toString(36).slice(2, 8)}`
+
+const normalizedSuggestions = computed(() => {
+  const limit = Math.max(1, props.suggestionLimit)
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const raw of props.keySuggestions) {
+    const value = raw.trim()
+    if (!value) {
+      continue
+    }
+    const key = value.toLowerCase()
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    unique.push(value)
+    if (unique.length >= limit) {
+      break
+    }
+  }
+  return unique
+})
+
 const displayRows = computed(() => {
   const rows = [...props.rows]
   const last = rows[rows.length - 1]
   if (!last || last.key || last.value) {
-    rows.push({ key: '', value: '', enabled: true })
+    rows.push({ key: '', value: '', enabled: false })
   }
   return rows
 })
@@ -98,14 +147,18 @@ const displayRows = computed(() => {
 function emitRows(rows: KVRow[]) {
   const filtered = rows.filter((r, i) => i < rows.length - 1 || r.key || r.value)
   if (filtered.length === 0) {
-    filtered.push({ key: '', value: '', enabled: true })
+    filtered.push({ key: '', value: '', enabled: false })
   }
   emit('update:rows', filtered)
 }
 
 function onInput(index: number, field: 'key' | 'value', value: string) {
   const newRows = [...props.rows]
-  newRows[index] = { ...newRows[index], [field]: value }
+  const nextRow = { ...newRows[index], [field]: value }
+  if (!nextRow.enabled && (nextRow.key.trim() || nextRow.value.trim())) {
+    nextRow.enabled = true
+  }
+  newRows[index] = nextRow
   emit('update:rows', newRows)
 }
 
@@ -113,7 +166,7 @@ function onFocus(index: number) {
   if (index === props.rows.length - 1) {
     const last = props.rows[index]
     if (last.key || last.value) {
-      emit('update:rows', [...props.rows, { key: '', value: '', enabled: true }])
+      emit('update:rows', [...props.rows, { key: '', value: '', enabled: false }])
     }
   }
 }
@@ -128,9 +181,48 @@ function toggleRow(index: number) {
 function removeRow(index: number) {
   const newRows = props.rows.filter((_, i) => i !== index)
   if (newRows.length === 0) {
-    newRows.push({ key: '', value: '', enabled: true })
+    newRows.push({ key: '', value: '', enabled: false })
   }
   emit('update:rows', newRows)
+}
+
+function getValueSuggestionsByRow(index: number): string[] {
+  const row = props.rows[index]
+  if (!row || !row.key.trim()) {
+    return []
+  }
+
+  const key = row.key.trim().toLowerCase()
+  const candidates = props.valueSuggestionsMap[key] || []
+  const limit = Math.max(1, props.valueSuggestionLimit)
+  const unique: string[] = []
+  const seen = new Set<string>()
+
+  for (const raw of candidates) {
+    const value = raw.trim()
+    if (!value) {
+      continue
+    }
+    const dedupeKey = value.toLowerCase()
+    if (seen.has(dedupeKey)) {
+      continue
+    }
+    seen.add(dedupeKey)
+    unique.push(value)
+    if (unique.length >= limit) {
+      break
+    }
+  }
+
+  return unique
+}
+
+function getValueDatalistId(index: number): string | undefined {
+  const suggestions = getValueSuggestionsByRow(index)
+  if (suggestions.length === 0) {
+    return undefined
+  }
+  return `ui-table-editor-values-${props.valueSuggestionScope}-${index}`
 }
 </script>
 

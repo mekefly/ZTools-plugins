@@ -30,6 +30,10 @@ export interface ResponseState {
   body: string
   raw: string
   error: string | null
+  contentType: string
+  isBinary: boolean
+  base64Body: string | null
+  fileName: string | null
 }
 
 const defaultRequest: RequestState = {
@@ -61,31 +65,66 @@ const defaultResponse: ResponseState = {
   headers: {},
   body: '',
   raw: '',
-  error: null
+  error: null,
+  contentType: '',
+  isBinary: false,
+  base64Body: null,
+  fileName: null
 }
 
 const request = reactive<RequestState>({ ...defaultRequest })
 const response = reactive<ResponseState>({ ...defaultResponse })
 
-export function useRequestStore() {
-  function setRequest(data: Partial<RequestState>) {
-    Object.assign(request, data)
+function cloneState<T>(state: T): T {
+  return JSON.parse(JSON.stringify(state)) as T
+}
+
+function normalizeRequestState(data: Partial<RequestState>): RequestState {
+  return {
+    ...defaultRequest,
+    ...data,
+    auth: {
+      ...defaultRequest.auth,
+      ...data.auth
+    },
+    body: {
+      ...defaultRequest.body,
+      ...data.body,
+      formData: data.body?.formData ? cloneState(data.body.formData) : []
+    },
+    params: data.params ? cloneState(data.params) : [],
+    headers: data.headers ? cloneState(data.headers) : []
+  }
+}
+
+export function useRequestStore(): {
+  request: RequestState
+  response: ResponseState
+  setRequest: (data: Partial<RequestState>) => void
+  loadRequest: (data: RequestState) => void
+  resetRequest: () => void
+  setResponse: (data: Partial<ResponseState>) => void
+  resetResponse: () => void
+  getRequestSnapshot: () => RequestState
+} {
+  function setRequest(data: Partial<RequestState>): void {
+    Object.assign(request, normalizeRequestState({ ...request, ...data }))
   }
 
-  function loadRequest(data: RequestState) {
-    Object.assign(request, JSON.parse(JSON.stringify(data)))
+  function loadRequest(data: RequestState): void {
+    Object.assign(request, normalizeRequestState(cloneState(data)))
   }
 
-  function resetRequest() {
-    Object.assign(request, JSON.parse(JSON.stringify(defaultRequest)))
+  function resetRequest(): void {
+    Object.assign(request, cloneState(defaultRequest))
   }
 
-  function setResponse(data: Partial<ResponseState>) {
+  function setResponse(data: Partial<ResponseState>): void {
     Object.assign(response, data)
   }
 
-  function resetResponse() {
-    Object.assign(response, JSON.parse(JSON.stringify(defaultResponse)))
+  function resetResponse(): void {
+    Object.assign(response, cloneState(defaultResponse))
   }
 
   function getRequestSnapshot(): RequestState {

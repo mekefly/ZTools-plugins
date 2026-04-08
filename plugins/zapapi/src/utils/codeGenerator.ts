@@ -1,25 +1,49 @@
 import type { RequestState } from '../store/request'
 
+function getEnabledQuery(req: RequestState): string {
+  return req.params
+    .filter((p) => p.enabled && p.key)
+    .map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
+    .join('&')
+}
+
+function getEnabledUrlEncodedBody(req: RequestState): string {
+  return req.body.formData
+    .filter((f) => f.enabled && f.key)
+    .map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`)
+    .join('&')
+}
+
+function getQuerySeparator(url: string): string {
+  if (url.includes('?')) {
+    return '&'
+  }
+
+  return '?'
+}
+
 function buildCurl(req: RequestState): string {
   let cmd = `curl -X ${req.method} '${req.url}'`
 
   if (req.params.length > 0) {
-    const query = req.params
-      .filter((p) => p.enabled && p.key)
-      .map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
-      .join('&')
-    if (query) cmd += `?${query}`
+    const query = getEnabledQuery(req)
+    if (query) {
+      cmd += `?${query}`
+    }
   }
 
   if (req.auth.type === 'bearer' && req.auth.token) {
-    cmd += ` \\\n  -H 'Authorization: Bearer ${req.auth.token}'`
+    cmd += ` \
+  -H 'Authorization: Bearer ${req.auth.token}'`
   } else if (req.auth.type === 'basic' && req.auth.username) {
-    cmd += ` \\\n  -u '${req.auth.username}:${req.auth.password}'`
+    cmd += ` \
+  -u '${req.auth.username}:${req.auth.password}'`
   } else if (req.auth.type === 'apikey') {
     if (req.auth.apiKeyLocation === 'header') {
-      cmd += ` \\\n  -H '${req.auth.apiKeyHeader || 'X-API-Key'}: ${req.auth.apiKey}'`
+      cmd += ` \
+  -H '${req.auth.apiKeyHeader || 'X-API-Key'}: ${req.auth.apiKey}'`
     } else {
-      const sep = req.url.includes('?') ? '&' : '?'
+      const sep = getQuerySeparator(req.url)
       cmd += `${sep}${req.auth.apiKeyHeader || 'api_key'}=${req.auth.apiKey}`
     }
   }
@@ -27,25 +51,43 @@ function buildCurl(req: RequestState): string {
   req.headers
     .filter((h) => h.enabled && h.key)
     .forEach((h) => {
-      cmd += ` \\\n  -H '${h.key}: ${h.value}'`
+      cmd += ` \
+  -H '${h.key}: ${h.value}'`
     })
 
-  if (req.body.type === 'json' && req.body.raw) {
-    cmd += ` \\\n  -H 'Content-Type: application/json' \\\n  -d '${req.body.raw}'`
-  } else if (req.body.type === 'raw' && req.body.raw) {
-    cmd += ` \\\n  -d '${req.body.raw}'`
-  } else if (req.body.type === 'formdata' && req.body.formData) {
-    req.body.formData
-      .filter((f) => f.enabled && f.key)
-      .forEach((f) => {
-        cmd += ` \\\n  -F '${f.key}=${f.value}'`
-      })
-  } else if (req.body.type === 'urlencoded' && req.body.formData) {
-    const data = req.body.formData
-      .filter((f) => f.enabled && f.key)
-      .map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`)
-      .join('&')
-    cmd += ` \\\n  -d '${data}'`
+  switch (req.body.type) {
+    case 'json':
+      if (req.body.raw) {
+        cmd += ` \
+  -H 'Content-Type: application/json' \
+  -d '${req.body.raw}'`
+      }
+      break
+    case 'raw':
+      if (req.body.raw) {
+        cmd += ` \
+  -d '${req.body.raw}'`
+      }
+      break
+    case 'formdata':
+      if (req.body.formData) {
+        req.body.formData
+          .filter((f) => f.enabled && f.key)
+          .forEach((f) => {
+            cmd += ` \
+  -F '${f.key}=${f.value}'`
+          })
+      }
+      break
+    case 'urlencoded':
+      if (req.body.formData) {
+        const data = getEnabledUrlEncodedBody(req)
+        cmd += ` \
+  -d '${data}'`
+      }
+      break
+    case 'none':
+      break
   }
 
   return cmd
@@ -83,25 +125,21 @@ function buildFetch(req: RequestState): string {
   } else if (req.body.type === 'raw' && req.body.raw) {
     options.body = req.body.raw
   } else if (req.body.type === 'urlencoded' && req.body.formData) {
-    const data = req.body.formData
-      .filter((f) => f.enabled && f.key)
-      .map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`)
-      .join('&')
+    const data = getEnabledUrlEncodedBody(req)
     headers['Content-Type'] = 'application/x-www-form-urlencoded'
     options.body = data
   }
 
   let url = req.url
   if (req.params.length > 0) {
-    const query = req.params
-      .filter((p) => p.enabled && p.key)
-      .map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`)
-      .join('&')
-    if (query) url += (url.includes('?') ? '&' : '?') + query
+    const query = getEnabledQuery(req)
+    if (query) {
+      url += `${getQuerySeparator(url)}${query}`
+    }
   }
 
   if (req.auth.type === 'apikey' && req.auth.apiKeyLocation === 'query' && req.auth.apiKey) {
-    const sep = url.includes('?') ? '&' : '?'
+    const sep = getQuerySeparator(url)
     url += `${sep}${req.auth.apiKeyHeader || 'api_key'}=${req.auth.apiKey}`
   }
 
@@ -115,17 +153,18 @@ function buildFetch(req: RequestState): string {
 function buildPython(req: RequestState): string {
   let code = "import requests\n\n"
 
-  let url = req.url
-  if (req.params.length > 0) {
+  const hasParams = req.params.length > 0
+  if (hasParams) {
     const params = req.params
       .filter((p) => p.enabled && p.key)
       .reduce((acc: Record<string, string>, p) => {
         acc[p.key] = p.value
         return acc
       }, {} as Record<string, string>)
-    code += `url = "${url}"\nparams = ${JSON.stringify(params, null, 2).replace(/"/g, "'")}\n\n`
+
+    code += `url = "${req.url}"\nparams = ${JSON.stringify(params, null, 2).replace(/"/g, "'")}\n\n`
   } else {
-    code += `url = "${url}"\n\n`
+    code += `url = "${req.url}"\n\n`
   }
 
   const headers: Record<string, string> = {}
@@ -147,13 +186,18 @@ function buildPython(req: RequestState): string {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (Object.keys(headers).length > 0) {
+  const hasHeaders = Object.keys(headers).length > 0
+  if (hasHeaders) {
     code += `headers = ${JSON.stringify(headers, null, 2).replace(/"/g, "'")}\n\n`
   }
 
   const args: string[] = ['url']
-  if (Object.keys(headers).length > 0) args.push('headers=headers')
-  if (req.params.length > 0) args.push('params=params')
+  if (hasHeaders) {
+    args.push('headers=headers')
+  }
+  if (hasParams) {
+    args.push('params=params')
+  }
 
   if (req.body.type === 'json' && req.body.raw) {
     code += `data = ${req.body.raw}\n\n`

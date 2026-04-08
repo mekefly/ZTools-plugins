@@ -57,6 +57,19 @@ function highlightJson(json: string): string {
   )
 }
 
+function isValidJson(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return false
+  }
+  try {
+    JSON.parse(trimmed)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function highlightHtml(html: string): string {
   const e = escapeHtml(html)
   return e.replace(
@@ -82,12 +95,23 @@ function highlightHtml(html: string): string {
   )
 }
 
-function detectLang(body: string, contentType?: string): 'json' | 'html' | 'xml' | 'text' {
+function highlightJavaScript(code: string): string {
+  const escaped = escapeHtml(code)
+  return escaped
+    .replace(/\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|try|catch|finally|async|await|new|class|extends|import|from|export|default|throw|typeof|instanceof|in|of|this)\b/g, '<span style="color:var(--accent-primary)">$1</span>')
+    .replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, '<span style="color:var(--success-color)">$1</span>')
+    .replace(/\b(true|false|null|undefined)\b/g, '<span style="color:#a78bfa">$1</span>')
+    .replace(/\b\d+(?:\.\d+)?\b/g, '<span style="color:var(--warning-color)">$&</span>')
+    .replace(/(\/\/.*$)/gm, '<span style="color:var(--text-muted)">$1</span>')
+}
+
+function detectLang(body: string, contentType?: string): 'json' | 'html' | 'xml' | 'javascript' | 'text' {
   if (contentType) {
     const ct = contentType.toLowerCase()
     if (ct.includes('json')) return 'json'
     if (ct.includes('html')) return 'html'
     if (ct.includes('xml')) return 'xml'
+    if (ct.includes('javascript') || ct.includes('ecmascript')) return 'javascript'
   }
   const t = body.trim()
   if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
@@ -98,13 +122,17 @@ function detectLang(body: string, contentType?: string): 'json' | 'html' | 'xml'
   return 'text'
 }
 
-export function highlight(body: string, contentType?: string): string {
+export type HighlightMode = 'auto' | 'json' | 'xml' | 'html' | 'javascript' | 'text'
+
+export function highlight(body: string, contentType?: string, mode: HighlightMode = 'auto'): string {
   if (!body) return ''
-  const lang = detectLang(body, contentType)
+  const lang = mode === 'auto' ? detectLang(body, contentType) : mode
   switch (lang) {
-    case 'json': return highlightJson(body)
+    case 'json':
+      return isValidJson(body) ? highlightJson(body) : escapeHtml(body)
     case 'html':
     case 'xml': return highlightHtml(normalizeMarkupBody(body))
+    case 'javascript': return highlightJavaScript(body)
     default: return escapeHtml(body)
   }
 }

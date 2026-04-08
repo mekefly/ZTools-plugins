@@ -55,3 +55,6 @@ desktop.ini
 tmp/
 temp/
 *.tmp
+
+# Local agent/tooling metadata
+.opencode/

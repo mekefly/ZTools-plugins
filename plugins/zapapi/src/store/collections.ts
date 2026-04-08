@@ -117,17 +117,6 @@ export function useCollectionsStore() {
     }
   }
 
-  function exportCollections(): string {
-    return JSON.stringify(state.collections, null, 2)
-  }
-
-  function importCollections(json: string) {
-    const data = JSON.parse(json)
-    if (Array.isArray(data)) {
-      state.collections = data
-    }
-  }
-
   return {
     state,
     createCollection,
@@ -135,8 +124,6 @@ export function useCollectionsStore() {
     deleteCollection,
     addRequest,
     updateRequest,
-    deleteRequest,
-    exportCollections,
-    importCollections
+    deleteRequest
   }
 }

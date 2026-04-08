@@ -64,9 +64,9 @@
               @click.stop
             />
           </template>
-          <template v-else>
-            <span class="collection-name" @dblclick.stop="startEditCollection(collection)">{{ collection.name }}</span>
-          </template>
+            <template v-else>
+              <span class="collection-name">{{ collection.name }}</span>
+            </template>
           <div class="collection-header__actions">
             <UiTooltip :content="t('common.edit')" placement="bottom">
               <UiButton variant="ghost" size="xs" icon-only @click.stop="startEditCollection(collection)">
@@ -90,7 +90,8 @@
             :key="req.id"
             class="request-item"
             :class="{ active: activeRequest === req.id }"
-            @click="$emit('select-request', collection.id, req.id)"
+            @click="onRequestClick(collection.id, req.id)"
+            @dblclick.stop="onRequestDoubleClick(collection.id, req.id)"
           >
             <span class="method-badge" :class="req.method.toLowerCase()">{{ req.method }}</span>
             <template v-if="editingRequestId === req.id">
@@ -104,7 +105,7 @@
               />
             </template>
             <template v-else>
-              <span class="request-name" @dblclick.stop="startEditRequest(collection.id, req)">{{ req.name }}</span>
+              <span class="request-name">{{ req.name }}</span>
             </template>
             <div class="request-item__actions">
               <UiTooltip :content="t('common.edit')" placement="bottom">
@@ -203,7 +204,6 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCollectionsStore } from '../store/collections'
 import { useHistoryStore, type HistoryItem } from '../store/history'
-import { useRequestStore } from '../store/request'
 import UiButton from './ui/UiButton.vue'
 import UiBadge from './ui/UiBadge.vue'
 import UiEmpty from './ui/UiEmpty.vue'
@@ -221,15 +221,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-request': [collectionId: string, requestId: string]
+  'open-request-in-new-tab': [collectionId: string, requestId: string]
   'new-request': [collectionId: string]
   'new-collection': []
   'manage-collections': []
   'toggle': []
+  'load-history': [item: HistoryItem]
 }>()
 
 const collectionsStore = useCollectionsStore()
 const historyStore = useHistoryStore()
-const requestStore = useRequestStore()
 
 const expandedCollections = ref<Set<string>>(new Set())
 const activeTab = ref<'collections' | 'history'>('collections')
@@ -241,6 +242,7 @@ const editingRequestName = ref('')
 
 const pendingDeleteCollection = ref<string | null>(null)
 const pendingDeleteRequest = ref<{ collectionId: string; requestId: string } | null>(null)
+let requestClickTimer: number | null = null
 
 function toggleCollection(id: string) {
   if (editingCollectionId.value) return
@@ -340,14 +342,26 @@ function formatTime(timestamp: number): string {
 }
 
 function loadHistory(item: HistoryItem) {
-  requestStore.loadRequest({
-    method: item.method,
-    url: item.url,
-    params: item.params,
-    headers: item.headers,
-    auth: item.auth,
-    body: item.body
-  } as any)
+  emit('load-history', item)
+}
+
+function onRequestClick(collectionId: string, requestId: string) {
+  if (requestClickTimer !== null) {
+    window.clearTimeout(requestClickTimer)
+  }
+
+  requestClickTimer = window.setTimeout(() => {
+    emit('select-request', collectionId, requestId)
+    requestClickTimer = null
+  }, 180)
+}
+
+function onRequestDoubleClick(collectionId: string, requestId: string) {
+  if (requestClickTimer !== null) {
+    window.clearTimeout(requestClickTimer)
+    requestClickTimer = null
+  }
+  emit('open-request-in-new-tab', collectionId, requestId)
 }
 
 function getStatusVariant(status: number): 'success' | 'warning' | 'error' | 'info' {

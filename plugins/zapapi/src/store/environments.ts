@@ -15,7 +15,9 @@ interface EnvironmentVariable {
 }
 
 function normalizeVariables(variables: unknown): EnvironmentVariable[] {
-  if (!Array.isArray(variables)) return []
+  if (!Array.isArray(variables)) {
+    return []
+  }
 
   return variables
     .filter((item): item is { key?: unknown; value?: unknown; enabled?: unknown } => item !== null && typeof item === 'object')
@@ -26,10 +28,14 @@ function normalizeVariables(variables: unknown): EnvironmentVariable[] {
 }
 
 function normalizeEnvironment(env: unknown): Environment | null {
-  if (env === null || typeof env !== 'object') return null
+  if (env === null || typeof env !== 'object') {
+    return null
+  }
 
   const item = env as { id?: unknown; name?: unknown; variables?: unknown }
-  if (typeof item.id !== 'string' || typeof item.name !== 'string') return null
+  if (typeof item.id !== 'string' || typeof item.name !== 'string') {
+    return null
+  }
 
   return {
     id: item.id,
@@ -45,10 +51,14 @@ function generateId(): string {
 function loadFromStorage(): Environment[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY)
-    if (!data) return []
+    if (!data) {
+      return []
+    }
 
     const parsed = JSON.parse(data)
-    if (!Array.isArray(parsed)) return []
+    if (!Array.isArray(parsed)) {
+      return []
+    }
 
     return parsed
       .map((env) => normalizeEnvironment(env))
@@ -67,8 +77,28 @@ function saveToStorage(envs: Environment[]) {
 }
 
 function saveActiveId(id: string | null) {
-  if (id) localStorage.setItem(ACTIVE_KEY, id)
-  else localStorage.removeItem(ACTIVE_KEY)
+  if (id) {
+    localStorage.setItem(ACTIVE_KEY, id)
+    return
+  }
+
+  localStorage.removeItem(ACTIVE_KEY)
+}
+
+function getFirstEnvironmentId(envs: Environment[]): string | null {
+  if (envs.length > 0) {
+    return envs[0].id
+  }
+
+  return null
+}
+
+function normalizeVariableKey(rawKey: string): string {
+  return rawKey
+    .replace(/^\{\{\s*/, '')
+    .replace(/\s*\}\}$/, '')
+    .replace(/^\{\s*/, '')
+    .replace(/\s*\}$/, '')
 }
 
 const state = reactive({
@@ -101,16 +131,18 @@ export function useEnvironmentStore() {
 
   function updateEnvironment(id: string, data: Partial<Environment>) {
     const index = state.environments.findIndex((e) => e.id === id)
-    if (index !== -1) {
-      const existing = state.environments[index]
-      Object.assign(existing, data)
+    if (index === -1) {
+      return
     }
+
+    const existing = state.environments[index]
+    Object.assign(existing, data)
   }
 
   function deleteEnvironment(id: string) {
     state.environments = state.environments.filter((e) => e.id !== id)
     if (state.activeEnvId === id) {
-      state.activeEnvId = state.environments.length > 0 ? state.environments[0].id : null
+      state.activeEnvId = getFirstEnvironmentId(state.environments)
     }
   }
 
@@ -120,60 +152,55 @@ export function useEnvironmentStore() {
 
   function getActiveEnv(): Environment | null {
     if (!state.activeEnvId) {
-      if (state.environments.length > 0) {
-        state.activeEnvId = state.environments[0].id
-        return state.environments[0]
+      const firstEnvironment = state.environments[0]
+      if (firstEnvironment) {
+        state.activeEnvId = firstEnvironment.id
+        return firstEnvironment
       }
+
       return null
     }
+
     const env = state.environments.find((e) => e.id === state.activeEnvId)
     if (!env) {
-      state.activeEnvId = state.environments.length > 0 ? state.environments[0].id : null
-      return state.environments.length > 0 ? state.environments[0] : null
+      const firstEnvironment = state.environments[0]
+      if (firstEnvironment) {
+        state.activeEnvId = firstEnvironment.id
+        return firstEnvironment
+      }
+
+      state.activeEnvId = null
+      return null
     }
+
     return env
   }
 
   function getVariables(): Record<string, string> {
     const env = getActiveEnv()
-    if (!env) return {}
+    if (!env) {
+      return {}
+    }
+
     const vars: Record<string, string> = {}
     env.variables
       .filter((v) => v.key)
       .forEach((v) => {
         const rawKey = v.key.trim()
-        if (!rawKey) return
+        if (!rawKey) {
+          return
+        }
 
-        const normalizedKey = rawKey
-          .replace(/^\{\{\s*/, '')
-          .replace(/\s*\}\}$/, '')
-          .replace(/^\{\s*/, '')
-          .replace(/\s*\}$/, '')
+        const normalizedKey = normalizeVariableKey(rawKey)
 
-        if (!normalizedKey) return
+        if (!normalizedKey) {
+          return
+        }
+
         vars[normalizedKey] = v.value
       })
+
     return vars
-  }
-
-  function exportEnvironments(): string {
-    return JSON.stringify(state.environments, null, 2)
-  }
-
-  function importEnvironments(json: string) {
-    const data = JSON.parse(json)
-    if (Array.isArray(data)) {
-      state.environments = data
-        .map((env) => normalizeEnvironment(env))
-        .filter((env): env is Environment => env !== null)
-
-      const activeExists = state.activeEnvId
-        ? state.environments.some((env) => env.id === state.activeEnvId)
-        : false
-      if (!activeExists) {
-        state.activeEnvId = state.environments.length > 0 ? state.environments[0].id : null
-      }
-    }
   }
 
   return {
@@ -183,8 +210,6 @@ export function useEnvironmentStore() {
     deleteEnvironment,
     setActiveEnv,
     getActiveEnv,
-    getVariables,
-    exportEnvironments,
-    importEnvironments
+    getVariables
   }
 }

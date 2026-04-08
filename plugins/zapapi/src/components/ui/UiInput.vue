@@ -47,7 +47,14 @@ const emit = defineEmits<{
 const inputRef = ref<HTMLInputElement | null>(null)
 const isFocused = ref(false)
 
-defineExpose({ focus: () => inputRef.value?.focus() })
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+  select: () => inputRef.value?.select(),
+  focusAndSelect: () => {
+    inputRef.value?.focus()
+    inputRef.value?.select()
+  }
+})
 </script>
 
 <style scoped>

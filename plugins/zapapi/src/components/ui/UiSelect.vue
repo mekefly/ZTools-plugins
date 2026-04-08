@@ -11,6 +11,7 @@
       @keydown.up.prevent="!disabled && navigate(-1)"
     >
       <span class="ui-select__value" :class="{ 'ui-select__value--placeholder': !selectedLabel }">
+        <span v-if="selectedOption?.icon" class="ui-select__icon" v-html="selectedOption.icon"></span>
         {{ selectedLabel || placeholder }}
       </span>
       <svg class="ui-select__chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -32,7 +33,10 @@
           @click="select(option.value)"
           @mouseenter="focusedIndex = index"
         >
-          {{ option.label }}
+          <span class="ui-select__option-label">
+            <span v-if="option.icon" class="ui-select__icon" v-html="option.icon"></span>
+            <span>{{ option.label }}</span>
+          </span>
           <svg v-if="modelValue === option.value" class="ui-select__check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
@@ -48,6 +52,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 interface Option {
   label: string
   value: string | number | null
+  icon?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -70,6 +75,10 @@ const dropdownStyle = ref<Record<string, string>>({})
 const selectedLabel = computed(() => {
   const found = props.options.find((o) => o.value === props.modelValue)
   return found ? found.label : ''
+})
+
+const selectedOption = computed(() => {
+  return props.options.find((o) => o.value === props.modelValue) || null
 })
 
 function toggle() {
@@ -183,9 +192,28 @@ onUnmounted(() => {
 
 .ui-select__value {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ui-select__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.ui-select__icon :deep(svg) {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 
 .ui-select__value--placeholder {
@@ -239,6 +267,12 @@ onUnmounted(() => {
   color: var(--text-primary);
   cursor: pointer;
   transition: background var(--transition-fast);
+}
+
+.ui-select__option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .ui-select__option:hover,

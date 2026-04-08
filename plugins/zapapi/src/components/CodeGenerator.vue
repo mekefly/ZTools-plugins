@@ -25,7 +25,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { generateCode, type CodeLanguage } from '../utils/codeGenerator'
-import { useRequestStore } from '../store/request'
+import type { RequestState } from '../store/request'
 import { useEnvironmentStore } from '../store/environments'
 import { resolveVariables } from '../utils/variableResolver'
 import UiTabs from './ui/UiTabs.vue'
@@ -33,8 +33,11 @@ import UiButton from './ui/UiButton.vue'
 
 const { t } = useI18n()
 
-const requestStore = useRequestStore()
 const envStore = useEnvironmentStore()
+
+const props = defineProps<{
+  request: RequestState
+}>()
 
 const activeLang = ref<CodeLanguage>('curl')
 const copied = ref(false)
@@ -46,7 +49,7 @@ const languages = computed(() => [
 ])
 
 const generatedCode = computed(() => {
-  const snapshot = requestStore.getRequestSnapshot()
+  const snapshot = JSON.parse(JSON.stringify(props.request)) as RequestState
   const variables = envStore.getVariables()
   snapshot.url = resolveVariables(snapshot.url, variables)
   snapshot.params = snapshot.params.map((p) => ({

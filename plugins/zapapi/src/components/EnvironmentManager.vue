@@ -116,13 +116,6 @@ function removeVariable(index: number) {
   }
 }
 
-function exportAllEnvironments() {
-  const json = envStore.exportEnvironments()
-  window.services.writeJsonFile(json, 'environments.json')
-  window.ztools.showTip(t('env.allExported'))
-}
-
-defineExpose({ exportAllEnvironments })
 </script>
 
 <style scoped>
