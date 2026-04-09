@@ -43,7 +43,7 @@ defineExpose({ focus: () => textareaRef.value?.focus() })
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--input-bg);
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-fast);
   overflow: hidden;
 }
 
@@ -53,17 +53,17 @@ defineExpose({ focus: () => textareaRef.value?.focus() })
 
 .ui-textarea-wrapper--focused {
   border-color: var(--border-active);
-  box-shadow: 0 0 12px var(--accent-glow);
+  box-shadow: none;
 }
 
 .ui-textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
   line-height: 1.6;
   outline: none;
   resize: vertical;

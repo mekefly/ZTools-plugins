@@ -54,21 +54,18 @@ defineEmits<{
 
 .ui-button--primary {
   background: var(--accent-primary);
-  color: var(--bg-deep);
+  color: #ffffff;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .ui-button--primary:hover:not(.ui-button--disabled) {
-  background: #33EBFF;
-  border-color: #33EBFF;
-  box-shadow: 0 0 20px var(--accent-glow-strong);
-  transform: translateY(-1px);
+  background: #e55c2b;
+  border-color: #e55c2b;
 }
 
 .ui-button--primary:active:not(.ui-button--disabled) {
-  transform: translateY(0);
-  box-shadow: 0 0 8px var(--accent-glow);
+  background: #d14917;
+  border-color: #d14917;
 }
 
 .ui-button--secondary {
@@ -80,11 +77,10 @@ defineEmits<{
 .ui-button--secondary:hover:not(.ui-button--disabled) {
   background: var(--bg-elevated);
   border-color: var(--border-color-hover);
-  transform: translateY(-1px);
 }
 
 .ui-button--secondary:active:not(.ui-button--disabled) {
-  transform: translateY(0);
+  background: var(--bg-overlay);
 }
 
 .ui-button--ghost {
@@ -94,69 +90,71 @@ defineEmits<{
 }
 
 .ui-button--ghost:hover:not(.ui-button--disabled) {
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   color: var(--text-primary);
-  border-color: var(--border-color);
 }
 
 .ui-button--danger {
-  background: transparent;
+  background: var(--bg-surface);
   color: var(--error-color);
-  border-color: transparent;
+  border-color: var(--border-color);
 }
 
 .ui-button--danger:hover:not(.ui-button--disabled) {
-  background: var(--error-glow);
+  background: var(--error-color);
+  color: #ffffff;
   border-color: var(--error-color);
 }
 
 .ui-button--success {
-  background: transparent;
+  background: var(--bg-surface);
   color: var(--success-color);
-  border-color: transparent;
+  border-color: var(--border-color);
 }
 
 .ui-button--success:hover:not(.ui-button--disabled) {
-  background: var(--success-glow);
+  background: var(--success-color);
+  color: #ffffff;
   border-color: var(--success-color);
 }
 
 .ui-button--warning {
-  background: transparent;
+  background: var(--bg-surface);
   color: var(--warning-color);
-  border-color: transparent;
+  border-color: var(--border-color);
 }
 
 .ui-button--warning:hover:not(.ui-button--disabled) {
-  background: var(--warning-glow);
+  background: var(--warning-color);
+  color: #ffffff;
   border-color: var(--warning-color);
 }
 
 .ui-button--xs {
-  padding: 2px 6px;
-  font-size: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .ui-button--sm {
-  padding: 5px 10px;
+  padding: 6px 12px;
   font-size: 12px;
 }
 
 .ui-button--md {
-  padding: 7px 14px;
+  padding: 8px 16px;
   font-size: 13px;
 }
 
 .ui-button--icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 32px;
+  min-height: 32px;
 }
 
 .ui-button--disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 </style>

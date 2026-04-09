@@ -143,11 +143,12 @@ import { useSettingsStore } from '../store/settings'
 import { setLocale, getLocale } from '../i18n'
 import UiSelect from './ui/UiSelect.vue'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const settings = useSettingsStore()
-const currentLocale = ref<string>(getLocale())
+const currentLocale = ref<'zh-CN' | 'zh-TW' | 'en' | 'system'>(getLocale() as 'zh-CN' | 'zh-TW' | 'en' | 'system')
 
 const localeOptions = computed(() => [
+  { label: t('settings.langSystem'), value: 'system' },
   { label: t('settings.langZhCN'), value: 'zh-CN' },
   { label: t('settings.langZhTW'), value: 'zh-TW' },
   { label: t('settings.langEn'), value: 'en' }
@@ -155,13 +156,12 @@ const localeOptions = computed(() => [
 
 const selectedLocale = computed({
   get: () => currentLocale.value,
-  set: (val: string) => changeLocale(val as 'zh-CN' | 'zh-TW' | 'en')
+  set: (val: string) => changeLocale(val as 'zh-CN' | 'zh-TW' | 'en' | 'system')
 })
 
-function changeLocale(loc: 'zh-CN' | 'zh-TW' | 'en') {
+function changeLocale(loc: 'zh-CN' | 'zh-TW' | 'en' | 'system') {
   currentLocale.value = loc
   setLocale(loc)
-  locale.value = loc
 }
 
 const theme = computed(() => settings.getTheme())
@@ -175,8 +175,7 @@ defineEmits<{
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.4));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,17 +194,17 @@ defineEmits<{
   max-height: 85vh;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 16px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 40px rgba(0, 229, 255, 0.03);
-  animation: modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.2s ease;
   overflow: hidden;
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: scale(0.96) translateY(12px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .settings-header {
@@ -214,13 +213,13 @@ defineEmits<{
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   flex-shrink: 0;
 }
 
 .settings-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -235,12 +234,11 @@ defineEmits<{
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-sm);
 }
 
 .settings-close:hover {
-  background: var(--bg-overlay);
+  background: var(--bg-elevated);
   color: var(--text-primary);
 }
 
@@ -256,7 +254,7 @@ defineEmits<{
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .section-label {
@@ -265,7 +263,6 @@ defineEmits<{
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 /* Theme Options */
@@ -282,16 +279,15 @@ defineEmits<{
   gap: 8px;
   padding: 14px 8px 10px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
   cursor: pointer;
-  transition: all 0.2s ease;
   position: relative;
   color: var(--text-secondary);
 }
 
 .theme-card:hover {
-  border-color: var(--border-color-hover);
+  border-color: var(--text-muted);
   background: var(--bg-elevated);
 }
 
@@ -299,7 +295,6 @@ defineEmits<{
   border-color: var(--accent-primary);
   background: var(--bg-elevated);
   color: var(--accent-primary);
-  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .theme-card__preview {
@@ -308,7 +303,7 @@ defineEmits<{
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
 }
 
 .theme-card__preview--system {
@@ -317,18 +312,18 @@ defineEmits<{
 }
 
 .theme-card__preview--dark {
-  background: #0A0E1A;
-  color: #00E5FF;
+  background: #2b2b2b;
+  color: #f9f9f9;
 }
 
 .theme-card__preview--light {
-  background: #F8FAFC;
-  color: #0891B2;
+  background: #f9f9f9;
+  color: #2b2b2b;
   border: 1px solid var(--border-color);
 }
 
 .theme-card__label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -349,8 +344,8 @@ defineEmits<{
   display: flex;
   gap: 14px;
   padding: 14px;
-  border-radius: 8px;
-  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
 }
 
@@ -360,22 +355,26 @@ defineEmits<{
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
-  background: var(--accent-glow);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
   color: var(--accent-primary);
   flex-shrink: 0;
+  border: 1px solid var(--border-color);
 }
 
 .about-card__content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .about-card__title {
   margin: 0 0 4px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .about-card__desc {
@@ -399,9 +398,8 @@ defineEmits<{
   gap: 6px;
   padding: 12px 6px 10px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-base);
-  transition: all 0.2s ease;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
   cursor: default;
 }
 
@@ -409,25 +407,18 @@ defineEmits<{
   width: 22px;
   height: 22px;
   color: var(--text-muted);
-  transition: color 0.2s ease;
 }
 
 .tech-card__label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
   text-align: center;
-  transition: color 0.2s ease;
 }
 
 .tech-card:hover {
   border-color: var(--tech-color);
-  background: color-mix(in srgb, var(--tech-color) 8%, var(--bg-base));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--tech-color) 15%, transparent);
-}
-
-.tech-card:hover .tech-card__icon {
-  color: var(--tech-color);
+  background: var(--bg-elevated);
 }
 
 .tech-card:hover .tech-card__label {

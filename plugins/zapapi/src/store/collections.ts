@@ -10,32 +10,61 @@ export interface CollectionRequest {
   params: Array<{ key: string; value: string; enabled: boolean }>
   headers: Array<{ key: string; value: string; enabled: boolean }>
   auth: {
-    type: 'none' | 'bearer' | 'basic' | 'apikey'
+    type: 'none' | 'bearer' | 'basic' | 'apikey' | 'jwt-bearer' | 'digest'
     token?: string
     username?: string
     password?: string
     apiKey?: string
     apiKeyLocation?: 'header' | 'query'
     apiKeyHeader?: string
+    jwtSecret?: string
+    jwtAlgorithm?: 'HS256' | 'HS384' | 'HS512'
+    jwtHeaderPrefix?: string
+    jwtHeader?: string
+    jwtPayload?: string
+    jwtAutoIat?: boolean
+    jwtAutoExp?: boolean
+    jwtExpSeconds?: string
+    digestUsername?: string
+    digestPassword?: string
+    digestAlgorithm?: 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess'
   }
   body: {
     type: 'none' | 'json' | 'formdata' | 'urlencoded' | 'raw'
+    kind?: 'none' | 'text' | 'structured' | 'binary' | 'other'
+    contentType?: string
     raw?: string
-    formData?: Array<{ key: string; value: string; enabled: boolean; isFile: boolean }>
+    formData?: Array<{ key: string; value: string; enabled: boolean; isFile: boolean; fileToken?: string }>
+    binary?: { fileToken?: string; fileName?: string; fileSize?: number; fileType?: string }
   }
-}
+  socket: {
+    status: 'disconnected' | 'connecting' | 'connected'
+    messages: Array<{ id: string; type: 'sent' | 'received' | 'system'; data: string; time: number }>
+    messageType: 'Text' | 'JSON' | 'Binary'
+  }}
 
 export interface Collection {
   id: string
   name: string
   auth: {
-    type: 'none' | 'bearer' | 'basic' | 'apikey'
+    type: 'none' | 'bearer' | 'basic' | 'apikey' | 'jwt-bearer' | 'digest'
     token?: string
     username?: string
     password?: string
     apiKey?: string
     apiKeyLocation?: 'header' | 'query'
     apiKeyHeader?: string
+    jwtSecret?: string
+    jwtAlgorithm?: 'HS256' | 'HS384' | 'HS512'
+    jwtHeaderPrefix?: string
+    jwtHeader?: string
+    jwtPayload?: string
+    jwtAutoIat?: boolean
+    jwtAutoExp?: boolean
+    jwtExpSeconds?: string
+    digestUsername?: string
+    digestPassword?: string
+    digestAlgorithm?: 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess'
   }
   requests: CollectionRequest[]
 }

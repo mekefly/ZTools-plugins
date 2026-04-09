@@ -78,11 +78,10 @@ defineExpose({ add, success, error, warning, info })
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: var(--radius);
+  border-radius: 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-surface);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);

@@ -20,19 +20,18 @@ withDefaults(defineProps<{
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .ui-badge--sm {
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .ui-badge--md {
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 2px 8px;
+  font-size: 12px;
 }
 
 .ui-badge--default {
@@ -42,26 +41,26 @@ withDefaults(defineProps<{
 }
 
 .ui-badge--success {
-  background: var(--success-glow);
+  background: var(--bg-elevated);
   color: var(--success-color);
-  border: 1px solid rgba(0, 255, 136, 0.25);
+  border: 1px solid var(--success-color);
 }
 
 .ui-badge--warning {
-  background: var(--warning-glow);
+  background: var(--bg-elevated);
   color: var(--warning-color);
-  border: 1px solid rgba(255, 184, 0, 0.25);
+  border: 1px solid var(--warning-color);
 }
 
 .ui-badge--error {
-  background: var(--error-glow);
+  background: var(--bg-elevated);
   color: var(--error-color);
-  border: 1px solid rgba(255, 68, 102, 0.25);
+  border: 1px solid var(--error-color);
 }
 
 .ui-badge--info {
-  background: var(--info-glow);
+  background: var(--bg-elevated);
   color: var(--info-color);
-  border: 1px solid rgba(0, 229, 255, 0.25);
+  border: 1px solid var(--info-color);
 }
 </style>

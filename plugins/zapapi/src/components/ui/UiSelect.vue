@@ -1,6 +1,7 @@
 <template>
   <div class="ui-select" :class="{ 'ui-select--disabled': disabled, 'ui-select--open': isOpen }">
     <div
+      ref="triggerRef"
       class="ui-select__trigger"
       :tabindex="disabled ? -1 : 0"
       @click="!disabled && toggle()"
@@ -25,22 +26,24 @@
         :style="dropdownStyle"
         @mousedown.prevent
       >
-        <div
-          v-for="(option, index) in options"
-          :key="option.value"
-          class="ui-select__option"
-          :class="{ 'ui-select__option--selected': modelValue === option.value, 'ui-select__option--focused': focusedIndex === index }"
-          @click="select(option.value)"
-          @mouseenter="focusedIndex = index"
-        >
-          <span class="ui-select__option-label">
-            <span v-if="option.icon" class="ui-select__icon" v-html="option.icon"></span>
-            <span>{{ option.label }}</span>
-          </span>
-          <svg v-if="modelValue === option.value" class="ui-select__check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </div>
+        <template v-for="entry in renderEntries" :key="entry.key">
+          <div v-if="entry.type === 'group'" class="ui-select__group-label">{{ entry.label }}</div>
+          <div
+            v-else
+            class="ui-select__option"
+            :class="{ 'ui-select__option--selected': modelValue === entry.option.value, 'ui-select__option--focused': focusedIndex === entry.optionIndex }"
+            @click="select(entry.option.value)"
+            @mouseenter="focusedIndex = entry.optionIndex"
+          >
+            <span class="ui-select__option-label">
+              <span v-if="entry.option.icon" class="ui-select__icon" v-html="entry.option.icon"></span>
+              <span>{{ entry.option.label }}</span>
+            </span>
+            <svg v-if="modelValue === entry.option.value" class="ui-select__check" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+        </template>
       </div>
     </Teleport>
   </div>
@@ -49,15 +52,28 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 
+let activeSelectId: string | null = null
+let activeSelectCloser: (() => void) | null = null
+let selectIdSeed = 0
+
 interface Option {
   label: string
   value: string | number | null
   icon?: string
 }
 
+interface OptionGroup {
+  label: string
+  options: Option[]
+}
+
+type SelectOptionEntry =
+  | { type: 'group'; key: string; label: string }
+  | { type: 'option'; key: string; option: Option; optionIndex: number }
+
 const props = withDefaults(defineProps<{
   modelValue: string | number | null
-  options: Option[]
+  options: Array<Option | OptionGroup>
   placeholder?: string
   disabled?: boolean
 }>(), {
@@ -71,14 +87,68 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const focusedIndex = ref(0)
 const dropdownStyle = ref<Record<string, string>>({})
+const triggerRef = ref<HTMLElement | null>(null)
+const instanceId = `ui-select-${++selectIdSeed}`
+
+function isOptionGroup(entry: Option | OptionGroup): entry is OptionGroup {
+  return Array.isArray((entry as OptionGroup).options)
+}
+
+const flatOptions = computed(() => {
+  const output: Option[] = []
+  for (const entry of props.options) {
+    if (isOptionGroup(entry)) {
+      output.push(...entry.options)
+    } else {
+      output.push(entry)
+    }
+  }
+  return output
+})
+
+const renderEntries = computed<SelectOptionEntry[]>(() => {
+  const entries: SelectOptionEntry[] = []
+  let optionIndex = 0
+
+  props.options.forEach((entry, index) => {
+    if (isOptionGroup(entry)) {
+      entries.push({
+        type: 'group',
+        key: `group-${index}-${entry.label}`,
+        label: entry.label
+      })
+
+      entry.options.forEach((option, nestedIndex) => {
+        entries.push({
+          type: 'option',
+          key: `option-${index}-${nestedIndex}-${option.value ?? 'null'}`,
+          option,
+          optionIndex
+        })
+        optionIndex += 1
+      })
+      return
+    }
+
+    entries.push({
+      type: 'option',
+      key: `option-${index}-${entry.value ?? 'null'}`,
+      option: entry,
+      optionIndex
+    })
+    optionIndex += 1
+  })
+
+  return entries
+})
 
 const selectedLabel = computed(() => {
-  const found = props.options.find((o) => o.value === props.modelValue)
+  const found = flatOptions.value.find((o) => o.value === props.modelValue)
   return found ? found.label : ''
 })
 
 const selectedOption = computed(() => {
-  return props.options.find((o) => o.value === props.modelValue) || null
+  return flatOptions.value.find((o) => o.value === props.modelValue) || null
 })
 
 function toggle() {
@@ -86,14 +156,24 @@ function toggle() {
 }
 
 function open() {
+  if (activeSelectId && activeSelectId !== instanceId && activeSelectCloser) {
+    activeSelectCloser()
+  }
+
+  activeSelectId = instanceId
+  activeSelectCloser = () => close()
   isOpen.value = true
-  const idx = props.options.findIndex((o) => o.value === props.modelValue)
+  const idx = flatOptions.value.findIndex((o) => o.value === props.modelValue)
   focusedIndex.value = idx >= 0 ? idx : 0
   updateDropdownPosition()
 }
 
 function close() {
   isOpen.value = false
+  if (activeSelectId === instanceId) {
+    activeSelectId = null
+    activeSelectCloser = null
+  }
 }
 
 function select(value: string | number | null) {
@@ -103,14 +183,15 @@ function select(value: string | number | null) {
 
 function navigate(direction: number) {
   if (!isOpen.value) { open(); return }
+  if (flatOptions.value.length === 0) return
   const newIndex = focusedIndex.value + direction
-  if (newIndex >= 0 && newIndex < props.options.length) {
+  if (newIndex >= 0 && newIndex < flatOptions.value.length) {
     focusedIndex.value = newIndex
   }
 }
 
 function updateDropdownPosition() {
-  const el = document.querySelector('.ui-select--open .ui-select__trigger')
+  const el = triggerRef.value
   if (el) {
     const rect = el.getBoundingClientRect()
     dropdownStyle.value = {
@@ -146,6 +227,10 @@ watch(isOpen, (val) => {
 })
 
 onUnmounted(() => {
+  if (activeSelectId === instanceId) {
+    activeSelectId = null
+    activeSelectCloser = null
+  }
   window.removeEventListener('click', handleClickOutside)
   window.removeEventListener('resize', updateDropdownPosition)
   window.removeEventListener('scroll', updateDropdownPosition, true)
@@ -163,17 +248,17 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--input-bg);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-fast);
   outline: none;
-  min-height: 30px;
+  min-height: 32px;
 }
 
 .ui-select__trigger:hover:not(.ui-select--disabled) {
@@ -182,12 +267,12 @@ onUnmounted(() => {
 
 .ui-select__trigger:focus-visible {
   border-color: var(--border-active);
-  box-shadow: 0 0 12px var(--accent-glow);
+  box-shadow: none;
 }
 
 .ui-select--open .ui-select__trigger {
   border-color: var(--border-active);
-  box-shadow: 0 0 12px var(--accent-glow);
+  box-shadow: none;
 }
 
 .ui-select__value {
@@ -244,7 +329,7 @@ onUnmounted(() => {
 .ui-select__dropdown {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   padding: 4px;
   max-height: 240px;
   overflow-y: auto;
@@ -267,6 +352,21 @@ onUnmounted(() => {
   color: var(--text-primary);
   cursor: pointer;
   transition: background var(--transition-fast);
+}
+
+.ui-select__group-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ui-select__group-label:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
 }
 
 .ui-select__option-label {

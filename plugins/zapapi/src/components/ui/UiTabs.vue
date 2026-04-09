@@ -45,35 +45,34 @@ defineEmits<{
 
 .ui-tabs__list {
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
+  gap: 16px;
+  padding: 0 16px;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .ui-tabs__tab {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  padding: 5px 12px;
-  font-size: 11px;
+  padding: 10px 0;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: color var(--transition-fast);
   user-select: none;
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
 
 .ui-tabs__tab:hover {
   color: var(--text-primary);
-  background: var(--bg-elevated);
 }
 
 .ui-tabs__tab--active {
-  color: var(--accent-primary);
-  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 .ui-tabs__badge {
@@ -84,10 +83,15 @@ defineEmits<{
   height: 16px;
   padding: 0 4px;
   border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ui-tabs__tab--active .ui-tabs__badge {
   background: var(--accent-primary);
-  color: var(--bg-deep);
-  font-size: 9px;
-  font-weight: 700;
+  color: #ffffff;
 }
 
 .ui-tabs__content {

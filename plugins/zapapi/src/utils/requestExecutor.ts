@@ -1,5 +1,9 @@
 import type { RequestState } from '../store/request'
 import { resolveVariables } from './variableResolver'
+import { normalizeHttpUrl } from './urlNormalizer'
+import { createJwtToken } from './jwt'
+import { createDigestAuthorization } from './digestAuth'
+import { getFormDataFile } from './formDataFileStore'
 
 export interface SendResult {
   status: number
@@ -62,8 +66,35 @@ function isLikelyBinaryContent(contentType: string): boolean {
 
 const REQUEST_TIMEOUT_MS = 15000
 
+function resolveBodyKind(req: RequestState): 'none' | 'text' | 'structured' | 'binary' | 'other' {
+  if (req.body.kind) {
+    return req.body.kind
+  }
+
+  if (req.body.type === 'none') return 'none'
+  if (req.body.type === 'urlencoded' || req.body.type === 'formdata') return 'structured'
+  if (req.body.type === 'json') return 'text'
+  return 'other'
+}
+
+function resolveBodyContentType(req: RequestState): string {
+  if (req.body.contentType) {
+    return req.body.contentType
+  }
+
+  if (req.body.type === 'json') return 'application/json'
+  if (req.body.type === 'urlencoded') return 'application/x-www-form-urlencoded'
+  if (req.body.type === 'formdata') return 'multipart/form-data'
+  return ''
+}
+
 function buildUrl(req: RequestState, variables: Record<string, string>): string {
-  let url = resolveVariables(req.url, variables)
+  const normalized = normalizeHttpUrl(req.url, variables)
+  if (!normalized.ok) {
+    throw new Error(normalized.reason === 'unsupported_protocol' ? 'Only HTTP/HTTPS URLs are supported' : 'Invalid URL')
+  }
+
+  let url = normalized.url
 
   const enabledParams = req.params.filter((p) => p.enabled && p.key)
   if (enabledParams.length > 0) {
@@ -86,6 +117,8 @@ function buildHeaders(req: RequestState, variables: Record<string, string>): Rec
 
   if (req.auth.type === 'bearer' && req.auth.token) {
     headers['Authorization'] = `Bearer ${resolveVariables(req.auth.token, variables)}`
+  } else if (req.auth.type === 'jwt-bearer') {
+    // handled in executeSingleAttempt to allow async token generation
   } else if (req.auth.type === 'basic' && req.auth.username) {
     const encoded = btoa(
       `${resolveVariables(req.auth.username, variables)}:${resolveVariables(req.auth.password, variables)}`
@@ -101,24 +134,85 @@ function buildHeaders(req: RequestState, variables: Record<string, string>): Rec
       headers[resolveVariables(h.key, variables)] = resolveVariables(h.value, variables)
     })
 
+  const bodyKind = resolveBodyKind(req)
+  const bodyContentType = resolveBodyContentType(req)
+  const hasContentTypeHeader = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')
+  if (!hasContentTypeHeader && bodyKind !== 'none' && bodyContentType && bodyContentType !== 'multipart/form-data') {
+    headers['Content-Type'] = bodyContentType
+  }
+
   return headers
 }
 
+async function injectJwtBearerHeader(
+  req: RequestState,
+  headers: Record<string, string>,
+  variables: Record<string, string>
+): Promise<void> {
+  if (req.auth.type !== 'jwt-bearer') {
+    return
+  }
+
+  const secret = resolveVariables(req.auth.jwtSecret, variables)
+  const headerJson = resolveVariables(req.auth.jwtHeader, variables)
+  const payloadJson = resolveVariables(req.auth.jwtPayload, variables)
+  const token = await createJwtToken({
+    algorithm: req.auth.jwtAlgorithm,
+    headerJson,
+    payloadJson,
+    secret,
+    autoIat: req.auth.jwtAutoIat,
+    autoExp: req.auth.jwtAutoExp,
+    expSeconds: resolveVariables(req.auth.jwtExpSeconds, variables)
+  })
+  const prefix = resolveVariables(req.auth.jwtHeaderPrefix, variables).trim() || 'Bearer'
+  headers.Authorization = `${prefix} ${token}`
+}
+
 function buildBody(req: RequestState, variables: Record<string, string>): BodyInit | undefined {
-  switch (req.body.type) {
-    case 'json':
-      if (req.body.raw) {
-        return resolveVariables(req.body.raw, variables)
+  const bodyKind = resolveBodyKind(req)
+  const bodyContentType = resolveBodyContentType(req)
+
+  switch (bodyKind) {
+    case 'none':
+      return undefined
+    case 'text':
+    case 'other':
+      return req.body.raw ? resolveVariables(req.body.raw, variables) : undefined
+    case 'binary': {
+      const file = getFormDataFile(req.body.binary.fileToken)
+      if (!file) {
+        throw new Error('Missing binary file for request body')
+      }
+      return file
+    }
+    case 'structured':
+      if (bodyContentType === 'multipart/form-data' || req.body.type === 'formdata') {
+        const form = new FormData()
+        if (!req.body.formData) {
+          return form
+        }
+
+        for (const field of req.body.formData) {
+          if (!field.enabled || !field.key) {
+            continue
+          }
+
+          const key = resolveVariables(field.key, variables)
+          if (field.isFile) {
+            const file = getFormDataFile(field.fileToken)
+            if (!file) {
+              throw new Error(`Missing file for form-data field: ${key}`)
+            }
+            form.append(key, file, file.name)
+          } else {
+            form.append(key, resolveVariables(field.value, variables))
+          }
+        }
+
+        return form
       }
 
-      return undefined
-    case 'raw':
-      if (req.body.raw) {
-        return resolveVariables(req.body.raw, variables)
-      }
-
-      return undefined
-    case 'urlencoded':
       if (req.body.formData) {
         const params = new URLSearchParams()
         req.body.formData
@@ -134,9 +228,69 @@ function buildBody(req: RequestState, variables: Record<string, string>): BodyIn
       }
 
       return undefined
-    case 'none':
-    case 'formdata':
-      return undefined
+    default: {
+      const form = new FormData()
+      return form
+    }
+  }
+}
+
+async function responseToResult(response: Response, startTime: number): Promise<SendResult> {
+  const endTime = performance.now()
+
+  const responseHeaders: Record<string, string> = {}
+  response.headers.forEach((value, key) => {
+    responseHeaders[key.toLowerCase()] = value
+  })
+
+  const contentType = responseHeaders['content-type'] || ''
+  const contentDisposition = responseHeaders['content-disposition'] || ''
+  const fileName = parseContentDispositionFileName(contentDisposition)
+
+  const arrayBuffer = await response.arrayBuffer()
+  const size = arrayBuffer.byteLength
+  const binary = isLikelyBinaryContent(contentType)
+
+  if (binary) {
+    const bytes = new Uint8Array(arrayBuffer)
+    let binaryString = ''
+    bytes.forEach((value) => {
+      binaryString += String.fromCharCode(value)
+    })
+    const base64Body = btoa(binaryString)
+
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      body: '[binary data]',
+      raw: '[binary data]',
+      base64Body,
+      contentType,
+      isBinary: true,
+      fileName,
+      time: Math.round(endTime - startTime),
+      size,
+      error: null
+    }
+  }
+
+  const decoder = new TextDecoder()
+  const responseText = decoder.decode(arrayBuffer)
+
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+    body: responseText,
+    raw: responseText,
+    base64Body: null,
+    contentType,
+    isBinary: false,
+    fileName,
+    time: Math.round(endTime - startTime),
+    size,
+    error: null
   }
 }
 
@@ -148,6 +302,7 @@ async function executeSingleAttempt(
   const startTime = performance.now()
   const url = buildUrl(req, variables)
   const headers = buildHeaders(req, variables)
+  await injectJwtBearerHeader(req, headers, variables)
   const body = buildBody(req, variables)
 
   const controller = new AbortController()
@@ -168,63 +323,37 @@ async function executeSingleAttempt(
   }
 
   try {
-    const response = await fetch(url, fetchOptions)
-    const endTime = performance.now()
+    if (req.auth.type === 'digest' && (!req.auth.digestUsername || !req.auth.digestPassword)) {
+      throw new Error('Digest auth requires username and password')
+    }
 
-    const responseHeaders: Record<string, string> = {}
-    response.headers.forEach((value, key) => {
-      responseHeaders[key.toLowerCase()] = value
-    })
+    let response = await fetch(url, fetchOptions)
 
-    const contentType = responseHeaders['content-type'] || ''
-    const contentDisposition = responseHeaders['content-disposition'] || ''
-    const fileName = parseContentDispositionFileName(contentDisposition)
+    if (req.auth.type === 'digest' && response.status === 401) {
+      const challengeHeader = response.headers.get('www-authenticate') || ''
+      if (/^Digest\s+/i.test(challengeHeader)) {
+        const digestAuth = await createDigestAuthorization({
+          challengeHeader,
+          method: req.method,
+          requestUrl: url,
+          username: resolveVariables(req.auth.digestUsername, variables),
+          password: resolveVariables(req.auth.digestPassword, variables),
+          algorithm: req.auth.digestAlgorithm
+        })
 
-    const arrayBuffer = await response.arrayBuffer()
-    const size = arrayBuffer.byteLength
-    const binary = isLikelyBinaryContent(contentType)
+        const retryHeaders: Record<string, string> = {
+          ...headers,
+          Authorization: digestAuth
+        }
 
-    if (binary) {
-      const bytes = new Uint8Array(arrayBuffer)
-      let binaryString = ''
-      bytes.forEach((value) => {
-        binaryString += String.fromCharCode(value)
-      })
-      const base64Body = btoa(binaryString)
-
-      return {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders,
-        body: '[binary data]',
-        raw: '[binary data]',
-        base64Body,
-        contentType,
-        isBinary: true,
-        fileName,
-        time: Math.round(endTime - startTime),
-        size,
-        error: null
+        response = await fetch(url, {
+          ...fetchOptions,
+          headers: retryHeaders
+        })
       }
     }
 
-    const decoder = new TextDecoder()
-    const responseText = decoder.decode(arrayBuffer)
-
-    return {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      body: responseText,
-      raw: responseText,
-      base64Body: null,
-      contentType,
-      isBinary: false,
-      fileName,
-      time: Math.round(endTime - startTime),
-      size,
-      error: null
-    }
+    return responseToResult(response, startTime)
   } catch (error: unknown) {
     const endTime = performance.now()
     const errName = error instanceof DOMException ? error.name : ''

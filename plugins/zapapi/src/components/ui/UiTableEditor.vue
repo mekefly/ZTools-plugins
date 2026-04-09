@@ -25,22 +25,22 @@
           </div>
         </div>
         <div class="ui-table-editor__col ui-table-editor__key-col">
-          <input
+          <UiAutocompleteInput
             class="ui-table-editor__input"
-            :value="row.key"
+            :model-value="row.key"
             :placeholder="keyPlaceholder"
-            :list="keyDatalistId"
-            @input="onInput(index, 'key', ($event.target as HTMLInputElement).value)"
+            :options="normalizedSuggestions"
+            @update:model-value="onInput(index, 'key', $event)"
             @focus="onFocus(index)"
           />
         </div>
         <div class="ui-table-editor__col">
-          <input
+          <UiAutocompleteInput
             class="ui-table-editor__input"
-            :value="row.value"
+            :model-value="row.value"
             :placeholder="valuePlaceholder"
-            :list="getValueDatalistId(index)"
-            @input="onInput(index, 'value', ($event.target as HTMLInputElement).value)"
+            :options="getValueSuggestionsByRow(index)"
+            @update:model-value="onInput(index, 'value', $event)"
           />
         </div>
         <div class="ui-table-editor__check-col">
@@ -58,23 +58,13 @@
         </div>
       </div>
     </div>
-    <datalist v-if="normalizedSuggestions.length > 0" :id="keyDatalistId">
-      <option v-for="item in normalizedSuggestions" :key="item" :value="item"></option>
-    </datalist>
-    <template v-for="(_, index) in rows" :key="`value-suggestions-${index}`">
-      <datalist
-        v-if="getValueSuggestionsByRow(index).length > 0"
-        :id="getValueDatalistId(index) || ''"
-      >
-        <option v-for="item in getValueSuggestionsByRow(index)" :key="item" :value="item"></option>
-      </datalist>
-    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import UiButton from './UiButton.vue'
+import UiAutocompleteInput from './UiAutocompleteInput.vue'
 
 interface KVRow {
   key: string
@@ -110,8 +100,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:rows': [rows: KVRow[]]
 }>()
-
-const keyDatalistId = `ui-table-editor-keys-${props.suggestionScope}-${Math.random().toString(36).slice(2, 8)}`
 
 const normalizedSuggestions = computed(() => {
   const limit = Math.max(1, props.suggestionLimit)
@@ -216,14 +204,6 @@ function getValueSuggestionsByRow(index: number): string[] {
 
   return unique
 }
-
-function getValueDatalistId(index: number): string | undefined {
-  const suggestions = getValueSuggestionsByRow(index)
-  if (suggestions.length === 0) {
-    return undefined
-  }
-  return `ui-table-editor-values-${props.valueSuggestionScope}-${index}`
-}
 </script>
 
 <style scoped>
@@ -237,27 +217,25 @@ function getValueDatalistId(index: number): string | undefined {
 
 .ui-table-editor__header {
   display: flex;
-  align-items: center;
-  background: var(--bg-elevated);
+  align-items: stretch;
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border-color);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
 .ui-table-editor__header .ui-table-editor__col {
-  padding: 6px 10px;
+  padding: 6px 12px;
+  border-right: 1px solid var(--border-color);
 }
 
 .ui-table-editor__header .ui-table-editor__check-col {
   padding: 6px 0;
-}
-
-.ui-table-editor__header .ui-table-editor__check-col {
-  padding: 6px 0;
+  border-right: 1px solid var(--border-color);
+  width: 36px;
+  min-width: 36px;
 }
 
 .ui-table-editor__body {
@@ -268,9 +246,9 @@ function getValueDatalistId(index: number): string | undefined {
 
 .ui-table-editor__row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   border-bottom: 1px solid var(--border-color);
-  transition: background var(--transition-fast);
+  background: var(--bg-surface);
 }
 
 .ui-table-editor__row:last-child {
@@ -278,22 +256,23 @@ function getValueDatalistId(index: number): string | undefined {
 }
 
 .ui-table-editor__row:hover {
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
 }
 
 .ui-table-editor__row.disabled {
-  opacity: 0.4;
+  background: transparent;
 }
 
-.ui-table-editor__row.disabled .ui-table-editor__input {
+.ui-table-editor__row.disabled :deep(.ui-autocomplete-input) {
   color: var(--text-muted);
 }
 
 .ui-table-editor__col {
   flex: 1;
   min-width: 0;
-  padding: 5px 10px;
+  padding: 0;
   border-right: 1px solid var(--border-color);
+  display: flex;
 }
 
 .ui-table-editor__col:last-child {
@@ -310,7 +289,6 @@ function getValueDatalistId(index: number): string | undefined {
   justify-content: center;
   width: 36px;
   flex-shrink: 0;
-  padding: 5px 0;
   border-right: 1px solid var(--border-color);
 }
 
@@ -324,10 +302,10 @@ function getValueDatalistId(index: number): string | undefined {
   justify-content: center;
   width: 16px;
   height: 16px;
-  border: 1px solid var(--border-color-hover);
-  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-surface);
   cursor: pointer;
-  color: transparent;
   transition: all var(--transition-fast);
 }
 
@@ -338,26 +316,26 @@ function getValueDatalistId(index: number): string | undefined {
 .ui-table-editor__check.active {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
-  color: var(--bg-deep);
+  color: var(--bg-surface);
 }
 
-.ui-table-editor__input {
+:deep(.ui-autocomplete-input) {
   width: 100%;
-  padding: 7px 10px;
+  padding: 6px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 13px;
+  font-family: inherit;
   outline: none;
 }
 
-.ui-table-editor__input::placeholder {
+:deep(.ui-autocomplete-input::placeholder) {
   color: var(--text-muted);
   font-family: inherit;
 }
 
-.ui-table-editor__input:disabled {
+:deep(.ui-autocomplete-wrapper.is-disabled .ui-autocomplete-input) {
   cursor: not-allowed;
 }
 </style>

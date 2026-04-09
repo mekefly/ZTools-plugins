@@ -255,7 +255,7 @@ function updatePosition() {
   font-size: 11px;
   font-weight: 500;
   line-height: 1.4;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
   max-width: min(320px, calc(100vw - 16px));

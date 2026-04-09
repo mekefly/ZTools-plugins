@@ -36,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import UiButton from './UiButton.vue'
 import UiInput from './UiInput.vue'
@@ -57,8 +58,10 @@ const props = withDefaults(defineProps<{
 }>(), {
   keyPlaceholder: 'Key',
   valuePlaceholder: 'Value',
-  addLabel: '添加'
+  addLabel: ''
 })
+
+const addLabel = computed(() => props.addLabel || t('kv.add'))
 
 const emit = defineEmits<{
   'update:rows': [rows: KVRow[]]
@@ -128,8 +131,8 @@ function removeRow(index: number) {
 
 .ui-kv-editor__toggle.active {
   color: var(--success-color);
-  background: var(--success-glow);
-  border-color: rgba(0, 255, 136, 0.2);
+  background: var(--bg-elevated);
+  border-color: var(--border-color);
 }
 
 .ui-kv-editor__key {
@@ -146,6 +149,6 @@ function removeRow(index: number) {
   padding: 20px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 </style>

@@ -144,36 +144,40 @@ defineExpose({ focus })
   position: relative;
   display: inline-flex;
   width: 100%;
-  min-height: 30px;
+  min-height: 32px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  background: var(--input-bg);
-  transition: all var(--transition-base);
+  background: var(--bg-surface);
+  transition: border-color var(--transition-base);
   overflow: hidden;
 }
 
-.ui-variable-input-wrapper:hover:not(.ui-variable-input-wrapper--focused) {
-  border-color: var(--border-color-hover);
+.ui-variable-input-wrapper:hover:not(.ui-variable-input-wrapper--focused):not(.ui-variable-input-wrapper--disabled) {     
+  border-color: var(--text-muted);
 }
 
 .ui-variable-input-wrapper--focused {
-  border-color: var(--border-active);
-  box-shadow: 0 0 12px var(--accent-glow);
+  border-color: var(--accent-primary);
+  outline: 1px solid var(--accent-primary);
 }
 
 .ui-variable-input-wrapper--disabled {
   opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ui-variable-input {
   width: 100%;
-  padding: 5px 10px;
+  height: 100%;
+  margin: 0;
+  padding: 6px 12px;
   border: none;
   background: transparent;
   color: transparent;
   caret-color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
+  line-height: normal;
   outline: none;
   position: relative;
   z-index: 1;
@@ -190,8 +194,8 @@ defineExpose({ focus })
 .ui-variable-input__overlay {
   position: absolute;
   inset: 0;
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 6px 12px;
+  font-size: 13px;
   font-family: inherit;
   line-height: normal;
   color: var(--text-primary);

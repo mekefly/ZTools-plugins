@@ -35,7 +35,7 @@ function saveSettings(state: SettingsState): void {
 function applyTheme(theme: ThemeMode): void {
   const root = document.documentElement
   if (theme === 'system') {
-    root.removeAttribute('data-theme')
+    root.setAttribute('data-theme', getSystemTheme())
     return
   }
 
@@ -43,6 +43,12 @@ function applyTheme(theme: ThemeMode): void {
 }
 
 function getSystemTheme(): 'dark' | 'light' {
+  try {
+    if (typeof window !== 'undefined' && window.ztools?.isDarkColors) {
+      return window.ztools.isDarkColors() ? 'dark' : 'light'
+    }
+  } catch {}
+
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 

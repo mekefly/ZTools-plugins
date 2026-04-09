@@ -65,8 +65,8 @@ defineExpose({
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--input-bg);
-  transition: all var(--transition-base);
-  min-height: 30px;
+  transition: border-color var(--transition-fast);
+  min-height: 32px;
 }
 
 .ui-input-wrapper:hover:not(.ui-input-wrapper--focused) {
@@ -75,16 +75,16 @@ defineExpose({
 
 .ui-input-wrapper--focused {
   border-color: var(--border-active);
-  box-shadow: 0 0 12px var(--accent-glow);
+  box-shadow: none;
 }
 
 .ui-input {
   flex: 1;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
   outline: none;
   min-width: 0;
@@ -103,9 +103,9 @@ defineExpose({
 .ui-input__suffix {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 10px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 </style>

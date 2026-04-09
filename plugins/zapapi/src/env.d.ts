@@ -19,6 +19,7 @@ interface ZToolsApiExtended {
   getClipboardContent: () => Promise<string>
   getPath: (name: string) => string
   onPluginOut: (cb: () => void) => void
+  isDarkColors: () => boolean
 }
 
 declare global {

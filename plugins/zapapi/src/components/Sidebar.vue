@@ -1,23 +1,23 @@
 <template>
   <div class="sidebar" :class="{ collapsed }">
     <div class="sidebar-header">
-      <span v-show="!collapsed" class="sidebar-header__title">{{ t('sidebar.collections') }}</span>
+      <span v-show="!collapsed" class="sidebar-header__title">{{ activeTab === 'collections' ? t('sidebar.collections') : t('sidebar.history') }}</span>
       <div class="sidebar-header__actions">
-        <UiTooltip :content="t('sidebar.newCollection')" placement="bottom">
+        <UiTooltip v-if="activeTab === 'collections'" :content="t('sidebar.newCollection')" placement="bottom">
           <UiButton v-show="!collapsed" variant="ghost" size="sm" icon-only @click="$emit('new-collection')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
           </UiButton>
         </UiTooltip>
-        <UiTooltip :content="t('sidebar.manageCollections')" placement="bottom">
+        <UiTooltip v-if="activeTab === 'collections'" :content="t('sidebar.manageCollections')" placement="bottom">
           <UiButton v-show="!collapsed" variant="ghost" size="sm" icon-only @click="$emit('manage-collections')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </UiButton>
         </UiTooltip>
-        <UiTooltip :content="collapsed ? '展开' : '折叠'" placement="bottom">
+        <UiTooltip :content="collapsed ? t('sidebar.expand') : t('sidebar.collapse')" placement="bottom">
           <UiButton variant="ghost" size="sm" icon-only @click="$emit('toggle')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/>
@@ -392,18 +392,17 @@ function getStatusVariant(status: number): 'success' | 'warning' | 'error' | 'in
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
+  padding: 12px 16px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
   border-bottom: 1px solid var(--border-color);
-  letter-spacing: 0.02em;
   color: var(--text-primary);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .sidebar.collapsed .sidebar-header {
-  padding: var(--space-sm) var(--space-xs);
+  padding: 12px 8px;
   justify-content: center;
 }
 
@@ -423,7 +422,7 @@ function getStatusVariant(status: number): 'success' | 'warning' | 'error' | 'in
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-sm) 0;
+  padding: 8px 0;
   min-height: 0;
 }
 
@@ -439,12 +438,12 @@ function getStatusVariant(status: number): 'success' | 'warning' | 'error' | 'in
   gap: var(--space-xs);
   flex: 1;
   justify-content: center;
-  padding: var(--space-sm) var(--space-md);
-  font-size: 11px;
+  padding: 10px 16px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: color var(--transition-fast);
   border-bottom: 2px solid transparent;
   user-select: none;
 }
@@ -670,20 +669,18 @@ function getStatusVariant(status: number): 'success' | 'warning' | 'error' | 'in
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 4px;
-  border-radius: var(--radius-sm);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  min-width: 32px;
+  font-size: 10px;
+  font-weight: 600;
   flex-shrink: 0;
-  border: 1px solid transparent;
+  text-transform: uppercase;
 }
 
-.method-badge.get { background: var(--success-glow); color: var(--success-color); border-color: rgba(0, 255, 136, 0.2); }
-.method-badge.post { background: var(--info-glow); color: var(--accent-primary); border-color: rgba(0, 229, 255, 0.2); }
-.method-badge.put { background: var(--warning-glow); color: var(--warning-color); border-color: rgba(255, 184, 0, 0.2); }
-.method-badge.delete { background: var(--error-glow); color: var(--error-color); border-color: rgba(255, 68, 102, 0.2); }
-.method-badge.patch { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border-color: rgba(139, 92, 246, 0.2); }
-.method-badge.head { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; border-color: rgba(45, 212, 191, 0.2); }
-.method-badge.options { background: var(--info-glow); color: var(--info-color); border-color: rgba(0, 229, 255, 0.2); }
+.method-badge.get { color: var(--success-color); }
+.method-badge.post { color: var(--warning-color); }
+.method-badge.put { color: var(--info-color); }
+.method-badge.delete { color: var(--error-color); }
+.method-badge.patch { color: #a78bfa; }
+.method-badge.head { color: #2dd4bf; }
+.method-badge.options { color: #a8a29e; }
 </style>

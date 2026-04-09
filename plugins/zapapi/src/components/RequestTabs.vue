@@ -1,152 +1,210 @@
-<template>
-  <div ref="tabsRootRef" class="request-tabs">
-    <UiButton
-      v-if="isOverflowing"
-      variant="ghost"
-      size="sm"
-      icon-only
-      class="request-tabs__nav"
-      :disabled="!canScrollLeft"
-      :aria-label="t('tabs.scrollLeft')"
-      @click="scrollTabsBy(-1)"
-    >
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-    </UiButton>
+<style scoped>
+.request-tabs {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
 
-    <div ref="tabsListRef" class="request-tabs__list" @scroll="updateScrollState" @wheel.prevent="onTabsWheel">
-      <div ref="tabsTrackRef" class="request-tabs__track">
-        <div
-          v-for="tab in props.tabs"
-        :key="tab.id"
-        role="button"
-        tabindex="0"
-        class="request-tabs__item"
-        :class="{ 'request-tabs__item--active': tab.id === props.activeTabId }"
-        @click="emit('select', tab.id)"
-        @keydown.enter="emit('select', tab.id)"
-        @dblclick="openRenameDialog(tab.id, tab.title)"
-        @contextmenu.prevent="openContextMenu($event, tab.id)"
-        >
-          <span class="request-tabs__method" :class="tab.method.toLowerCase()">{{ tab.method }}</span>
-          <span class="request-tabs__title">{{ tab.title }}</span>
-          <UiButton
-            variant="ghost"
-            size="xs"
-            icon-only
-            class="request-tabs__close"
-            @click.stop="emit('close', tab.id)"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </UiButton>
-        </div>
-      </div>
-      <UiTooltip v-if="!isOverflowing" :content="t('tabs.newTab')" placement="bottom">
-        <span ref="inlineNewButtonRef" class="request-tabs__new-wrap">
-          <UiButton variant="ghost" size="sm" icon-only class="request-tabs__new" @click="emit('new')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </UiButton>
-        </span>
-      </UiTooltip>
-    </div>
+.request-tabs__list {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
 
-    <UiButton
-      v-if="isOverflowing"
-      variant="ghost"
-      size="sm"
-      icon-only
-      class="request-tabs__nav"
-      :disabled="!canScrollRight"
-      :aria-label="t('tabs.scrollRight')"
-      @click="scrollTabsBy(1)"
-    >
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="9 18 15 12 9 6"/>
-      </svg>
-    </UiButton>
+.request-tabs__list::-webkit-scrollbar {
+  display: none;
+}
 
-    <UiTooltip v-if="isOverflowing" :content="t('tabs.newTab')" placement="bottom">
-      <span ref="fixedNewButtonRef" class="request-tabs__new-fixed">
-        <UiButton variant="ghost" size="sm" icon-only class="request-tabs__new" @click="emit('new')">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-        </UiButton>
-      </span>
-    </UiTooltip>
+.request-tabs__track {
+  display: flex;
+  height: 100%;
+}
 
-    <Teleport to="body">
-      <div
-        v-if="contextMenu.visible"
-        class="request-tabs__context-overlay"
-        @click="closeContextMenu"
-        @contextmenu.prevent="closeContextMenu"
-      >
-        <div
-          class="request-tabs__context-menu"
-          :style="contextMenuStyle"
-          @click.stop
-          @contextmenu.prevent
-        >
-          <button type="button" class="request-tabs__context-item" @click="runMenuAction('close')">
-            {{ t('tabs.closeCurrent') }}
-          </button>
-          <button type="button" class="request-tabs__context-item" @click="runMenuAction('closeOthers')">
-            {{ t('tabs.closeOthers') }}
-          </button>
-          <button type="button" class="request-tabs__context-item" @click="runMenuAction('closeRight')">
-            {{ t('tabs.closeRight') }}
-          </button>
-          <div class="request-tabs__context-divider"></div>
-          <button type="button" class="request-tabs__context-item" @click="runMenuAction('duplicate')">
-            {{ t('tabs.duplicate') }}
-          </button>
-        </div>
-      </div>
+.request-tabs__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 100%;
+  min-width: 120px;
+  max-width: 240px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  border-bottom: 2px solid transparent;
+}
 
-      <div v-if="showRenameDialog" class="request-tabs__rename-overlay" @click="closeRenameDialog">
-        <div
-          class="request-tabs__rename-dialog"
-          :style="renameDialogStyle"
-          @click.stop
-          @mousedown.stop
-        >
-          <div class="request-tabs__rename-header" @mousedown="startDragDialog">
-            <h3 class="request-tabs__rename-title">{{ t('tabs.renameTitle') }}</h3>
-            <UiButton variant="ghost" size="xs" icon-only @click="closeRenameDialog">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </UiButton>
-          </div>
-          <div class="request-tabs__rename-body">
-            <UiInput
-              ref="renameInputRef"
-              v-model="renameValue"
-              :placeholder="t('tabs.renamePlaceholder')"
-              @keydown.enter="confirmRename"
-            />
-            <div class="request-tabs__rename-actions">
-              <UiButton variant="ghost" size="sm" @click="closeRenameDialog">{{ t('common.cancel') }}</UiButton>
-              <UiButton variant="primary" size="sm" @click="confirmRename">{{ t('common.save') }}</UiButton>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="request-tabs__resize-handle"
-            :aria-label="t('tabs.resizeDialog')"
-            @mousedown.stop.prevent="startResizeDialog"
-          ></button>
-        </div>
-      </div>
-    </Teleport>
-  </div>
-</template>
+.request-tabs__item:hover {
+  background: var(--bg-elevated);
+}
+
+.request-tabs__item--active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent-primary);
+}
+
+.request-tabs__method {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  text-transform: uppercase;
+}
+
+/* Postman colors for methods */
+.request-tabs__method.get { color: #0b975d; }
+.request-tabs__method.post { color: #ffb400; }
+.request-tabs__method.put { color: #0072c6; }
+.request-tabs__method.delete { color: #d12915; }
+.request-tabs__method.patch { color: #ba6bd1; }
+.request-tabs__method.options { color: #8e44ad; }
+
+.request-tabs__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-tabs__close {
+  opacity: 0;
+  color: var(--text-muted);
+}
+
+.request-tabs__item:hover .request-tabs__close,
+.request-tabs__item--active .request-tabs__close {
+  opacity: 1;
+}
+
+.request-tabs__close:hover {
+  color: var(--text-primary);
+  background: var(--bg-overlay);
+}
+
+.request-tabs__nav {
+  height: 100%;
+  border-radius: 0;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
+}
+
+.request-tabs__new-wrap,
+.request-tabs__new-fixed {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 4px;
+}
+
+.request-tabs__new {
+  height: 24px;
+  width: 24px;
+  color: var(--text-muted);
+}
+
+.request-tabs__new:hover {
+  color: var(--text-primary);
+}
+
+.request-tabs__context-overlay,
+.request-tabs__rename-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.request-tabs__rename-overlay {
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.request-tabs__context-menu {
+  position: absolute;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 4px 0;
+  min-width: 160px;
+}
+
+.request-tabs__context-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.request-tabs__context-item:hover {
+  background: var(--bg-elevated);
+}
+
+.request-tabs__context-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.request-tabs__rename-dialog {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 400px;
+  overflow: hidden;
+}
+
+.request-tabs__rename-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  cursor: move;
+}
+
+.request-tabs__rename-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.request-tabs__rename-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.request-tabs__rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+</style>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
@@ -516,28 +574,28 @@ onBeforeUnmount(() => {
 .request-tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: 6px var(--space-md);
+  gap: 0;
+  padding: 0;
   border-bottom: 1px solid var(--border-color);
-  background: var(--panel-bg);
+  background: var(--bg-base);
+  height: 36px;
 }
 
 .request-tabs__list {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  height: 100%;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  padding-bottom: 2px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
 .request-tabs__track {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  height: 100%;
   flex-shrink: 0;
 }
 
@@ -546,49 +604,52 @@ onBeforeUnmount(() => {
 }
 
 .request-tabs__item {
-  border: 1px solid var(--border-color);
-  background: var(--bg-surface);
+  border: 1px solid transparent;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-base);
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  height: 30px;
+  height: 36px;
   min-width: 160px;
-  max-width: 280px;
+  max-width: 240px;
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  padding: 0 var(--space-sm);
+  padding: 0 12px;
   cursor: pointer;
-  transition: all var(--transition-base);
   flex-shrink: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.request-tabs__item:first-child {
+  border-left: 1px solid var(--border-color);
 }
 
 .request-tabs__item:hover {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
 }
 
 .request-tabs__item--active {
   color: var(--text-primary);
-  border-color: var(--accent-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-primary);
+  background: var(--bg-surface);
+  border-top-color: var(--accent-primary);
+  border-bottom-color: transparent;
 }
 
 .request-tabs__method {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  padding: 1px 4px;
-  border-radius: var(--radius-xs);
-  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  text-transform: uppercase;
 }
 
-.request-tabs__method.get { background: var(--success-glow); color: var(--success-color); border-color: rgba(0, 255, 136, 0.2); }
-.request-tabs__method.post { background: var(--info-glow); color: var(--accent-primary); border-color: rgba(0, 229, 255, 0.2); }
-.request-tabs__method.put { background: var(--warning-glow); color: var(--warning-color); border-color: rgba(255, 184, 0, 0.2); }
-.request-tabs__method.delete { background: var(--error-glow); color: var(--error-color); border-color: rgba(255, 68, 102, 0.2); }
-.request-tabs__method.patch { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border-color: rgba(139, 92, 246, 0.2); }
-.request-tabs__method.head { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; border-color: rgba(45, 212, 191, 0.2); }
-.request-tabs__method.options { background: var(--info-glow); color: var(--info-color); border-color: rgba(0, 229, 255, 0.2); }
+.request-tabs__method.get { color: var(--success-color); }
+.request-tabs__method.post { color: var(--warning-color); }
+.request-tabs__method.put { color: var(--info-color); }
+.request-tabs__method.delete { color: var(--error-color); }
+.request-tabs__method.patch { color: #a78bfa; }
+.request-tabs__method.head { color: #2dd4bf; }
+.request-tabs__method.options { color: #a8a29e; }
 
 .request-tabs__title {
   flex: 1;
@@ -596,17 +657,30 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .request-tabs__close {
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  border-radius: 4px;
+}
+.request-tabs__close:hover {
+  background: var(--border-color);
 }
 
 .request-tabs__new {
   flex-shrink: 0;
-  border: 1px dashed var(--border-color);
+  height: 36px;
+  width: 36px;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.request-tabs__new:hover {
+  background: var(--bg-surface);
 }
 
 .request-tabs__new-wrap,
@@ -617,6 +691,8 @@ onBeforeUnmount(() => {
 
 .request-tabs__nav {
   flex-shrink: 0;
+  height: 36px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .request-tabs__item:hover .request-tabs__close,
@@ -638,32 +714,32 @@ onBeforeUnmount(() => {
 
 .request-tabs__context-menu {
   position: fixed;
-  width: 150px;
+  width: 160px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   padding: 4px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  z-index: 9251;
 }
 
 .request-tabs__context-item {
   width: 100%;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   text-align: left;
   font-size: 12px;
-  padding: 7px 8px;
-  border-radius: var(--radius-xs);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .request-tabs__context-item:hover {
   background: var(--bg-elevated);
-  color: var(--text-primary);
 }
 
 .request-tabs__context-divider {
@@ -675,8 +751,7 @@ onBeforeUnmount(() => {
 .request-tabs__rename-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(3px);
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.4));
   z-index: 9200;
 }
 
@@ -685,30 +760,31 @@ onBeforeUnmount(() => {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg), 0 0 30px rgba(0, 229, 255, 0.06);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   overflow: hidden;
+  z-index: 9201;
 }
 
 .request-tabs__rename-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   cursor: move;
   user-select: none;
 }
 
 .request-tabs__rename-title {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .request-tabs__rename-body {
-  padding: 12px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -728,10 +804,10 @@ onBeforeUnmount(() => {
 .request-tabs__resize-handle::before {
   content: '';
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 7px;
-  height: 7px;
+  right: 4px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
   border-right: 1.5px solid var(--text-muted);
   border-bottom: 1.5px solid var(--text-muted);
 }

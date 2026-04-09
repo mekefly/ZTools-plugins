@@ -46,8 +46,7 @@ function onOverlayClick() {
 .ui-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,17 +62,17 @@ function onOverlayClick() {
 .ui-modal {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-lg, 16px);
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg), 0 0 40px rgba(0, 229, 255, 0.05);
-  animation: modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.2s ease;
   overflow: hidden;
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: scale(0.96) translateY(12px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .ui-modal--sm {
@@ -101,10 +100,10 @@ function onOverlayClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
 }
 
 .ui-modal__title {
@@ -112,13 +111,12 @@ function onOverlayClick() {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.01em;
 }
 
 .ui-modal__body {
   flex: 1;
   overflow: auto;
-  padding: 18px;
+  padding: 16px;
 }
 
 .ui-modal__footer {
@@ -126,9 +124,9 @@ function onOverlayClick() {
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-sm);
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
 }
 </style>

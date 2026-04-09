@@ -21,8 +21,16 @@ export interface HistoryItem {
   }
   body: {
     type: string
+    kind?: 'none' | 'text' | 'structured' | 'binary' | 'other'
+    contentType?: string
     raw?: string
-    formData?: Array<{ key: string; value: string; enabled: boolean; isFile: boolean }>
+    formData?: Array<{ key: string; value: string; enabled: boolean; isFile: boolean; fileToken?: string }>
+    binary?: { fileToken?: string; fileName?: string; fileSize?: number; fileType?: string }
+  }
+  socket?: {
+    status: 'disconnected' | 'connecting' | 'connected'
+    messages: Array<{ id: string; type: 'sent' | 'received' | 'system'; data: string; time: number }>
+    messageType: 'Text' | 'JSON' | 'Binary'
   }
   status?: number
   responseTime?: number

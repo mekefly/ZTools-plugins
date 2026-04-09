@@ -25,19 +25,24 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import UiButton from './UiButton.vue'
 
-withDefaults(defineProps<{
+const { t } = useI18n()
+
+const props = withDefaults(defineProps<{
   title: string
   message: string
   confirmText?: string
   cancelText?: string
   confirmVariant?: 'danger' | 'primary'
 }>(), {
-  confirmText: '确定',
-  cancelText: '取消',
   confirmVariant: 'primary'
 })
+
+const confirmText = computed(() => props.confirmText || t('common.confirm'))
+const cancelText = computed(() => props.cancelText || t('common.cancel'))
 
 const emit = defineEmits<{
   confirm: []
@@ -57,8 +62,7 @@ function cancel() {
 .ui-confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.4));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,18 +80,18 @@ function cancel() {
   max-width: 90vw;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-lg, 16px);
   padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   box-shadow: var(--shadow-lg);
-  animation: confirmIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: confirmIn 0.2s ease;
 }
 
 @keyframes confirmIn {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .ui-confirm__icon {
@@ -97,7 +101,7 @@ function cancel() {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--warning-glow);
+  background: rgba(255, 153, 0, 0.1);
   color: var(--warning-color);
   margin-bottom: 16px;
 }

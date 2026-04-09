@@ -64,20 +64,39 @@
           @new="newTab"
           @rename="renameTab"
         />
-        <RequestBuilder
-          :request="activeTab.request"
-          :response="activeTab.response"
-          :sending="activeTab.sending"
-          :has-response="hasResponse"
-          @send="onSend"
-          @save="onSave"
-          @cancel="onCancelSend"
-        />
-        <ResponseViewer
-          v-if="hasResponse"
-          :response="activeTab.response"
-          :sending="activeTab.sending"
-        />
+        <div class="workspace-region">
+          <RequestBuilder
+            :request="activeTab.request"
+            :response="activeTab.response"
+            :sending="activeTab.sending"
+            :has-response="showResponsePanel"
+            :response-collapsed="responseCollapsed"
+            @send="onSend"
+            @connect="onConnectSocket"
+            @disconnect="onDisconnectSocket"
+            @socket-send="onSocketSend"
+            @save="onSave"
+            @cancel="onCancelSend"
+          />
+          <div v-if="showResponsePanel" class="response-region" :class="{ 'response-region--collapsed': responseCollapsed }">
+            <div class="response-region__expanded">
+              <ResponseViewer
+                :response="activeTab.response"
+                :sending="activeTab.sending"
+                @toggle-collapse="responseCollapsed = true"
+              />
+            </div>
+            <div class="response-toggle-bar">
+              <div class="response-toggle-bar__spacer"></div>
+              <UiButton variant="ghost" size="xs" @click="responseCollapsed = !responseCollapsed">
+                <svg class="response-toggle-icon" :class="{ 'response-toggle-icon--collapsed': responseCollapsed }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                {{ responseCollapsed ? t('response.expand') : t('response.collapse') }}
+              </UiButton>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -106,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Sidebar from './components/Sidebar.vue'
 import RequestBuilder from './components/RequestBuilder.vue'
@@ -127,6 +146,8 @@ import { useEnvironmentStore } from './store/environments'
 import { useCollectionsStore } from './store/collections'
 import { useHistoryStore, type HistoryItem } from './store/history'
 import { createRequestController, type SendController } from './utils/requestExecutor'
+import { connectSocket, getSocketController } from './utils/socketExecutor'
+import { normalizeHttpUrl } from './utils/urlNormalizer'
 
 const { t } = useI18n()
 
@@ -171,12 +192,31 @@ const DEFAULT_REQUEST: RequestState = {
     password: '',
     apiKey: '',
     apiKeyLocation: 'header',
-    apiKeyHeader: 'X-API-Key'
+    apiKeyHeader: 'X-API-Key',
+    jwtSecret: '',
+    jwtAlgorithm: 'HS256',
+    jwtHeaderPrefix: 'Bearer',
+    jwtHeader: '{"alg":"HS256","typ":"JWT"}',
+    jwtPayload: '{}',
+    jwtAutoIat: true,
+    jwtAutoExp: false,
+    jwtExpSeconds: '3600',
+    digestUsername: '',
+    digestPassword: '',
+    digestAlgorithm: 'MD5'
   },
   body: {
     type: 'none',
+    kind: 'none',
+    contentType: '',
     raw: '',
-    formData: []
+    formData: [],
+    binary: {}
+  },
+  socket: {
+    status: 'disconnected',
+    messages: [],
+    messageType: 'Text'
   }
 }
 
@@ -252,6 +292,22 @@ const hasResponse = computed(() => {
     activeTab.value.response.status !== null ||
     Boolean(activeTab.value.response.error)
   )
+})
+
+const isSocketMethod = computed(() => {
+  return ['WS', 'TCP', 'UDP'].includes(activeTab.value.request.method)
+})
+
+const responseCollapsed = ref(false)
+
+const showResponsePanel = computed(() => {
+  return hasResponse.value && !isSocketMethod.value
+})
+
+watch(showResponsePanel, (visible) => {
+  if (!visible) {
+    responseCollapsed.value = false
+  }
 })
 
 function tabTitle(tab: RequestTabState): string {
@@ -353,8 +409,28 @@ function onNewRequest(collectionId: string) {
     url: '',
     params: [],
     headers: [],
-    auth: { type: 'none', token: '', username: '', password: '', apiKey: '', apiKeyLocation: 'header', apiKeyHeader: '' },
-    body: { type: 'none', raw: '', formData: [] }
+    auth: {
+      type: 'none',
+      token: '',
+      username: '',
+      password: '',
+      apiKey: '',
+      apiKeyLocation: 'header',
+      apiKeyHeader: '',
+      jwtSecret: '',
+      jwtAlgorithm: 'HS256',
+      jwtHeaderPrefix: 'Bearer',
+      jwtHeader: '{"alg":"HS256","typ":"JWT"}',
+      jwtPayload: '{}',
+      jwtAutoIat: true,
+      jwtAutoExp: false,
+      jwtExpSeconds: '3600',
+      digestUsername: '',
+      digestPassword: '',
+      digestAlgorithm: 'MD5'
+    },
+    body: { type: 'none', kind: 'none', contentType: '', raw: '', formData: [], binary: {} },
+    socket: { status: 'disconnected', messages: [], messageType: 'Text' }
   })
   loadIntoActiveTab(newReq as any, collectionId, newReq.id)
 }
@@ -372,7 +448,8 @@ function onLoadHistory(item: HistoryItem) {
       params: item.params,
       headers: item.headers,
       auth: item.auth,
-      body: item.body
+      body: item.body,
+      socket: { status: 'disconnected', messages: [], messageType: 'Text' }
     } as any,
     null,
     null
@@ -528,15 +605,22 @@ function confirmPendingTabClose() {
 }
 
 async function onSend() {
-  if (!activeTab.value.request.url) {
+  const variables = envStore.getVariables()
+  const normalizedUrl = normalizeHttpUrl(activeTab.value.request.url, variables)
+  if (!normalizedUrl.ok) {
+    const messageKey = normalizedUrl.reason === 'unsupported_protocol'
+      ? 'request.invalidHttpProtocol'
+      : 'request.invalidHttpUrl'
+    toastRef.value?.error(t(messageKey))
     return
   }
 
+  activeTab.value.request.url = normalizedUrl.url
+
   activeTab.value.sending = true
   activeTab.value.response = createEmptyResponse()
-
-  const variables = envStore.getVariables()
   const snapshot = cloneData(activeTab.value.request)
+  snapshot.url = normalizedUrl.url
 
   const historyItem = historyStore.addItem({
     method: snapshot.method,
@@ -583,7 +667,55 @@ function onCancelSend() {
     activeTab.value.controller.cancel()
   }
 }
+function onConnectSocket() {
+  if (!activeTab.value.request.url) return;
+  const variables = envStore.getVariables();
+  const snapshot = cloneData(activeTab.value.request);
+  const tabId = activeTab.value.id;
 
+  activeTab.value.request.socket.messages = [];
+  activeTab.value.request.socket.status = 'connecting';
+
+  connectSocket(
+    tabId,
+    snapshot,
+    variables,
+    (type, data) => {
+      const tab = tabs.value.find(t => t.id === tabId);
+      if (tab) {
+        tab.request.socket.messages.push({
+          id: Date.now() + '-' + Math.random(),
+          type,
+          data,
+          time: Date.now()
+        });
+      }
+    },
+    (status) => {
+      const tab = tabs.value.find(t => t.id === tabId);
+      if (tab) {
+        tab.request.socket.status = status;
+      }
+    },
+    t as any
+  );
+}
+
+function onDisconnectSocket() {
+  const tabId = activeTab.value.id;
+  const ctrl = getSocketController(tabId);
+  if (ctrl) {
+    ctrl.close();
+  }
+}
+
+function onSocketSend(message: string) {
+  const tabId = activeTab.value.id;
+  const ctrl = getSocketController(tabId);
+  if (ctrl) {
+    ctrl.send(message);
+  }
+}
 function onSave() {
   if (activeTab.value.collectionId && activeTab.value.requestId) {
     collectionsStore.updateRequest(activeTab.value.collectionId, activeTab.value.requestId, {
@@ -608,7 +740,8 @@ function onSave() {
     params: cloneData(activeTab.value.request.params),
     headers: cloneData(activeTab.value.request.headers),
     auth: cloneData(activeTab.value.request.auth),
-    body: cloneData(activeTab.value.request.body)
+    body: cloneData(activeTab.value.request.body),
+    socket: cloneData(activeTab.value.request.socket)
   })
 
   activeTab.value.collectionId = targetCollectionId
@@ -626,16 +759,16 @@ function onSave() {
   height: 100vh;
   background: var(--bg-deep);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
 }
 
 .zapapi-header {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
-  padding: var(--space-md) var(--space-lg);
+  padding: 0 16px;
+  height: 48px;
   background: var(--header-bg);
-  backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -643,11 +776,9 @@ function onSave() {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--accent-primary);
-  letter-spacing: -0.02em;
-  text-shadow: 0 0 20px var(--accent-glow);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .zapapi-env-selector {
@@ -680,5 +811,102 @@ function onSave() {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  background: var(--bg-base);
+}
+
+.workspace-region {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.response-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-sm);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.response-toggle-bar__spacer {
+  flex: 1;
+}
+
+.response-toggle-icon {
+  transition: transform var(--transition-fast);
+}
+
+.response-toggle-icon--collapsed {
+  transform: rotate(180deg);
+}
+
+.response-region {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 max(0px, calc(100% - 260px));
+  height: max(0px, calc(100% - 260px));
+  min-height: 0;
+  overflow: hidden;
+  transition: flex-basis var(--transition-base), height var(--transition-base), opacity 0.16s ease;
+}
+
+.response-region__expanded {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  opacity: 1;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+
+.response-region:not(.response-region--collapsed) .response-region__expanded {
+  transition-delay: 60ms;
+}
+
+.response-region__expanded > * {
+  min-height: 0;
+}
+
+.response-region .response-toggle-bar {
+  height: 0;
+  min-height: 0;
+  max-height: 0;
+  flex-basis: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  pointer-events: none;
+  transition: max-height var(--transition-base), opacity 0.16s ease;
+}
+
+.response-region--collapsed .response-region__expanded {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition-delay: 0ms;
+}
+
+.response-region--collapsed .response-toggle-bar {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  opacity: 1;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--border-color);
+  pointer-events: auto;
+}
+
+.response-region--collapsed {
+  flex: 0 0 42px;
+  height: 42px;
 }
 </style>

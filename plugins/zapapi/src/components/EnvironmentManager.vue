@@ -20,14 +20,24 @@
             @click="selectEnv(env)"
           >
             <UiInput
-              v-if="editingEnv?.id === env.id"
-              v-model="editingEnv.name"
+              v-if="renamingEnvId === env.id"
+              ref="renameInputRef"
+              v-model="renamingEnvName"
               class="env-item__input"
+              @click.stop
               @blur="saveEnvName"
               @keydown.enter="saveEnvName"
             />
             <span v-else class="env-item__name">{{ env.name }}</span>
             <div class="env-item__actions">
+              <UiTooltip :content="t('common.edit')" placement="bottom">
+                <UiButton variant="ghost" size="xs" icon-only @click.stop="startRenameEnv(env)">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                  </svg>
+                </UiButton>
+              </UiTooltip>
               <UiTooltip :content="t('common.delete')" placement="bottom">
                 <UiButton variant="danger" size="xs" icon-only @click.stop="deleteEnv(env.id)">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -67,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEnvironmentStore, type Environment } from '../store/environments'
 import UiButton from './ui/UiButton.vue'
@@ -79,6 +89,9 @@ const { t } = useI18n()
 
 const envStore = useEnvironmentStore()
 const editingEnv = ref<Environment | null>(null)
+const renamingEnvId = ref<string | null>(null)
+const renamingEnvName = ref('')
+const renameInputRef = ref<{ focusAndSelect?: () => void } | null>(null)
 
 function createNewEnv() {
   const name = `${t('env.defaultName')} ${envStore.state.environments.length + 1}`
@@ -91,13 +104,42 @@ function selectEnv(env: Environment) {
   envStore.setActiveEnv(env.id)
 }
 
+async function startRenameEnv(env: Environment) {
+  selectEnv(env)
+  renamingEnvId.value = env.id
+  renamingEnvName.value = env.name
+  await nextTick()
+  renameInputRef.value?.focusAndSelect?.()
+}
+
 function saveEnvName() {
-  if (editingEnv.value) {
-    envStore.updateEnvironment(editingEnv.value.id, { name: editingEnv.value.name })
+  if (!renamingEnvId.value) {
+    return
   }
+
+  const env = envStore.state.environments.find((item) => item.id === renamingEnvId.value)
+  if (!env) {
+    renamingEnvId.value = null
+    renamingEnvName.value = ''
+    return
+  }
+
+  const nextName = renamingEnvName.value.trim() || env.name
+  envStore.updateEnvironment(env.id, { name: nextName })
+
+  if (editingEnv.value?.id === env.id) {
+    editingEnv.value.name = nextName
+  }
+
+  renamingEnvId.value = null
+  renamingEnvName.value = ''
 }
 
 function deleteEnv(id: string) {
+  if (renamingEnvId.value === id) {
+    renamingEnvId.value = null
+    renamingEnvName.value = ''
+  }
   if (editingEnv.value?.id === id) {
     editingEnv.value = null
   }
@@ -162,6 +204,7 @@ function removeVariable(index: number) {
 .env-manager__items {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px;
 }
 
@@ -176,6 +219,7 @@ function removeVariable(index: number) {
   color: var(--text-secondary);
   transition: all var(--transition-base);
   border-left: 2px solid transparent;
+  min-width: 0;
 }
 
 .env-item:hover {
@@ -192,6 +236,7 @@ function removeVariable(index: number) {
 
 .env-item__name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -199,13 +244,19 @@ function removeVariable(index: number) {
 
 .env-item__input {
   flex: 1;
+  min-width: 0;
 }
 
 .env-item__actions {
   display: flex;
   gap: 1px;
+  flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-fast);
+}
+
+.env-item:focus-within .env-item__actions {
+  opacity: 1;
 }
 
 .env-item:hover .env-item__actions {

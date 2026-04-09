@@ -13,10 +13,20 @@
           {{ item.label }}
         </button>
       </div>
-      <div v-if="response.status !== null" class="response-meta">
-        <span class="meta-pill"><span class="meta-label">{{ t('response.statusLabel') }}</span><UiBadge :variant="statusVariant" size="sm">{{ response.status }} {{ response.statusText }}</UiBadge></span>
-        <span class="meta-pill"><span class="meta-label">{{ t('response.timeLabel') }}</span>{{ response.time }}ms</span>
-        <span class="meta-pill"><span class="meta-label">{{ t('response.sizeLabel') }}</span>{{ formatSize(response.size) }}</span>
+      <div class="response-topbar-right">
+        <div v-if="response.status !== null" class="response-meta">
+          <span class="meta-pill"><span class="meta-label">{{ t('response.statusLabel') }}</span><UiBadge :variant="statusVariant" size="sm">{{ response.status }} {{ response.statusText }}</UiBadge></span>
+          <span class="meta-pill"><span class="meta-label">{{ t('response.timeLabel') }}</span>{{ response.time }}ms</span>
+          <span class="meta-pill"><span class="meta-label">{{ t('response.sizeLabel') }}</span>{{ formatSize(response.size) }}</span>
+        </div>
+        <div class="response-topbar-actions">
+          <UiButton variant="ghost" size="xs" @click="$emit('toggle-collapse')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            {{ t('response.collapse') }}
+          </UiButton>
+        </div>
       </div>
     </div>
 
@@ -117,6 +127,10 @@ const { t } = useI18n()
 const props = defineProps<{
   response: ResponseState
   sending: boolean
+}>()
+
+defineEmits<{
+  'toggle-collapse': []
 }>()
 
 const activeMainTab = ref<'body' | 'raw' | 'headers' | 'cookies'>('body')
@@ -299,7 +313,8 @@ async function copyText(value: string): Promise<void> {
 .response-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: var(--space-sm);
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-surface);
   padding: 0 12px;
@@ -338,6 +353,18 @@ async function copyText(value: string): Promise<void> {
   gap: var(--space-sm);
 }
 
+.response-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.response-topbar-actions {
+  display: flex;
+  align-items: center;
+}
+
 .meta-pill {
   display: flex;
   align-items: center;
@@ -358,6 +385,8 @@ async function copyText(value: string): Promise<void> {
 
 .response-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
@@ -443,12 +472,16 @@ async function copyText(value: string): Promise<void> {
 .body-content,
 .headers-panel {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow-y: auto;
   padding: 10px 12px;
 }
 
 .code-highlight {
+  flex: 1;
+  min-height: 100%;
   margin: 0;
   padding: 10px;
   border: 1px solid var(--border-color);
@@ -459,6 +492,7 @@ async function copyText(value: string): Promise<void> {
   font-family: 'JetBrains Mono', 'SF Mono', monospace;
   white-space: pre-wrap;
   word-break: break-word;
+  box-sizing: border-box;
   overflow-x: hidden;
 }
 
@@ -517,8 +551,22 @@ async function copyText(value: string): Promise<void> {
 }
 
 .response-error-body {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
   padding: var(--space-lg);
   color: var(--error-color);
+  text-align: center;
+}
+
+.response-error-body p {
+  margin: 0;
 }
 
 .image-preview {
