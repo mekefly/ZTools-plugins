@@ -16,7 +16,7 @@ import ConfirmModal from './components/Modals/ConfirmModal.vue'
 import ImportDataModal from './components/Modals/ImportDataModal.vue'
 import ChangePasswordModal from './components/Modals/ChangePasswordModal.vue'
 import { STORAGE_KEY, CONFIG_KEY, DEFAULT_PINYIN_SCHEME } from './constants'
-import { matchesPinyin, type PinyinScheme } from './utils/pinyin'
+import { matchesPinyinCached, buildPinyinCache, type PinyinScheme, type PinyinCache } from './utils/pinyin'
 
 // --- Composables Initialization ---
 const {
@@ -47,10 +47,33 @@ const {
 // --- Local UI State ---
 const config = ref({ timerStyle: 'bar', nextPreview: true, pinyinScheme: DEFAULT_PINYIN_SCHEME })
 const searchQuery = ref('')
+
+// 拼音缓存：账户列表变化时重新计算，搜索时直接复用
+const pinyinCacheMap = ref<Map<string, PinyinCache>>(new Map())
+watch(
+  () => accounts.value.map(a => a.id + '|' + a.name),
+  () => {
+    const newMap = new Map<string, PinyinCache>()
+    for (const acc of accounts.value) {
+      newMap.set(acc.id, buildPinyinCache(acc.name))
+    }
+    pinyinCacheMap.value = newMap
+  },
+  { immediate: true }
+)
+
+// filteredAccounts 携带真实索引，避免模板中 indexOf 的 O(N²) 开销
 const filteredAccounts = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return accounts.value
-  return accounts.value.filter(acc => matchesPinyin(acc.name, q, (config.value.pinyinScheme || DEFAULT_PINYIN_SCHEME) as PinyinScheme))
+  const scheme = (config.value.pinyinScheme || DEFAULT_PINYIN_SCHEME) as PinyinScheme
+  return accounts.value
+    .map((acc, index) => ({ acc, index }))
+    .filter(({ acc }) => {
+      if (!q) return true
+      const cache = pinyinCacheMap.value.get(acc.id)
+      if (!cache) return acc.name.toLowerCase().includes(q)
+      return matchesPinyinCached(acc.name, q, scheme, cache)
+    })
 })
 
 const setupSubInput = () => {
@@ -305,7 +328,10 @@ const openAddModal = () => {
     algorithm: 'SHA1', digits: 6,
     encrypted: false
   }
-  nameError.value = false; secretError.value = false; secretErrorMsg.value = '密钥不合法'; nameWarn.value = false
+  nameError.value = false
+  secretError.value = false
+  secretErrorMsg.value = '密钥不合法'
+  nameWarn.value = false
   showModal.value = true
   showSecret.value = false
   activeModalDropdown.value = null
@@ -328,7 +354,8 @@ const finalizeForm = async () => {
     }
   }
 
-  nameError.value = false; secretError.value = false
+  nameError.value = false
+  secretError.value = false
   const nameVal = (modalForm.value.name || '').toString().trim()
   const secretVal = (modalForm.value.secret || '').toString().trim().replace(/\s/g, '')
 
@@ -347,7 +374,7 @@ const finalizeForm = async () => {
   const secureAccount = { ...JSON.parse(JSON.stringify(modalForm.value)), name: nameVal, secret: secretVal }
 
   // 检测同名（排除自身，编辑时不与自己比较）
-  const isDuplicate = accounts.value.some(a => a.name === nameVal && a.id !== secureAccount.id)
+  const isDuplicate = accounts.value.some(a => a.name.toLowerCase() === nameVal.toLowerCase() && a.id !== secureAccount.id)
   if (isDuplicate && !nameWarn.value) {
     nameWarn.value = true
     return
@@ -392,8 +419,12 @@ const handleAction = (action: string) => {
   if (action === 'edit') {
     modalTitle.value = '修改账号'
     modalForm.value = JSON.parse(JSON.stringify(acc))
-    nameError.value = false; secretError.value = false; nameWarn.value = false
-    showModal.value = true; showSecret.value = false; activeModalDropdown.value = null
+    nameError.value = false
+    secretError.value = false
+    nameWarn.value = false
+    showModal.value = true
+    showSecret.value = false
+    activeModalDropdown.value = null
   } else if (action === 'delete') {
     confirmData.value = { name: acc.name, id: acc.id }
     showConfirm.value = true
@@ -522,10 +553,10 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       </div>
       <transition-group name="list" tag="div" class="list-container">
         <AccountCard 
-          v-for="(acc, index) in filteredAccounts" 
+          v-for="{ acc, index } in filteredAccounts" 
           :key="acc.id" 
           :acc="acc" 
-          :index="accounts.indexOf(acc)"
+          :index="index"
           :token="tokens[acc.id]"
           :nextToken="nextTokens[acc.id]"
           :timeLeft="getAccountTimeLeft(acc)"
