@@ -4,14 +4,23 @@
       ref="triggerRef"
       class="ui-select__trigger"
       :tabindex="disabled ? -1 : 0"
+      role="combobox"
+      :aria-disabled="disabled ? 'true' : 'false'"
+      :aria-expanded="isOpen ? 'true' : 'false'"
+      aria-haspopup="listbox"
+      :aria-controls="dropdownId"
+      :aria-activedescendant="activeDescendantId"
       @click="!disabled && toggle()"
-      @keydown.enter="!disabled && toggle()"
-      @keydown.space.prevent="!disabled && toggle()"
+      @keydown.enter.prevent="!disabled && onEnter()"
+      @keydown.space.prevent="!disabled && onSpace()"
       @keydown.escape="close()"
       @keydown.down.prevent="!disabled && navigate(1)"
       @keydown.up.prevent="!disabled && navigate(-1)"
     >
-      <span class="ui-select__value" :class="{ 'ui-select__value--placeholder': !selectedLabel }">
+      <span class="ui-select__value" :class="[
+        { 'ui-select__value--placeholder': !selectedLabel },
+        variant === 'method' ? `method-color-${String(modelValue).toLowerCase()}` : ''
+      ]">
         <span v-if="selectedOption?.icon" class="ui-select__icon" v-html="selectedOption.icon"></span>
         {{ selectedLabel || placeholder }}
       </span>
@@ -22,20 +31,27 @@
     <Teleport to="body">
       <div
         v-if="isOpen"
+        :id="dropdownId"
         class="ui-select__dropdown"
         :style="dropdownStyle"
+        role="listbox"
         @mousedown.prevent
       >
         <template v-for="entry in renderEntries" :key="entry.key">
-          <div v-if="entry.type === 'group'" class="ui-select__group-label">{{ entry.label }}</div>
+          <div v-if="entry.type === 'group'" class="ui-select__group-label" role="presentation">{{ entry.label }}</div>
           <div
             v-else
+            :id="getOptionId(entry.optionIndex)"
             class="ui-select__option"
             :class="{ 'ui-select__option--selected': modelValue === entry.option.value, 'ui-select__option--focused': focusedIndex === entry.optionIndex }"
+            role="option"
+            :aria-selected="modelValue === entry.option.value ? 'true' : 'false'"
             @click="select(entry.option.value)"
             @mouseenter="focusedIndex = entry.optionIndex"
           >
-            <span class="ui-select__option-label">
+            <span class="ui-select__option-label" :class="[
+              variant === 'method' ? `method-color-${String(entry.option.value).toLowerCase()}` : ''
+            ]">
               <span v-if="entry.option.icon" class="ui-select__icon" v-html="entry.option.icon"></span>
               <span>{{ entry.option.label }}</span>
             </span>
@@ -76,8 +92,10 @@ const props = withDefaults(defineProps<{
   options: Array<Option | OptionGroup>
   placeholder?: string
   disabled?: boolean
+  variant?: 'default' | 'method'
 }>(), {
-  placeholder: ''
+  placeholder: '',
+  variant: 'default'
 })
 
 const emit = defineEmits<{
@@ -89,6 +107,7 @@ const focusedIndex = ref(0)
 const dropdownStyle = ref<Record<string, string>>({})
 const triggerRef = ref<HTMLElement | null>(null)
 const instanceId = `ui-select-${++selectIdSeed}`
+const dropdownId = `${instanceId}-listbox`
 
 function isOptionGroup(entry: Option | OptionGroup): entry is OptionGroup {
   return Array.isArray((entry as OptionGroup).options)
@@ -151,6 +170,41 @@ const selectedOption = computed(() => {
   return flatOptions.value.find((o) => o.value === props.modelValue) || null
 })
 
+const activeDescendantId = computed(() => {
+  if (!isOpen.value || flatOptions.value.length === 0) {
+    return undefined
+  }
+  return getOptionId(focusedIndex.value)
+})
+
+function getOptionId(index: number): string {
+  return `${instanceId}-option-${index}`
+}
+
+function onEnter() {
+  if (!isOpen.value) {
+    open()
+    return
+  }
+
+  const option = flatOptions.value[focusedIndex.value]
+  if (option) {
+    select(option.value)
+  }
+}
+
+function onSpace() {
+  if (!isOpen.value) {
+    open()
+    return
+  }
+
+  const option = flatOptions.value[focusedIndex.value]
+  if (option) {
+    select(option.value)
+  }
+}
+
 function toggle() {
   isOpen.value ? close() : open()
 }
@@ -184,10 +238,9 @@ function select(value: string | number | null) {
 function navigate(direction: number) {
   if (!isOpen.value) { open(); return }
   if (flatOptions.value.length === 0) return
-  const newIndex = focusedIndex.value + direction
-  if (newIndex >= 0 && newIndex < flatOptions.value.length) {
-    focusedIndex.value = newIndex
-  }
+  const max = flatOptions.value.length - 1
+  const newIndex = Math.min(max, Math.max(0, focusedIndex.value + direction))
+  focusedIndex.value = newIndex
 }
 
 function updateDropdownPosition() {
@@ -388,4 +441,16 @@ onUnmounted(() => {
 .ui-select__check {
   flex-shrink: 0;
 }
+
+.method-color-get { color: var(--success-color, #10b981) !important; font-weight: 700; }
+.method-color-post { color: var(--warning-color, #f59e0b) !important; font-weight: 700; }
+.method-color-put { color: var(--info-color, #3b82f6) !important; font-weight: 700; }
+.method-color-delete { color: var(--error-color, #f43f5e) !important; font-weight: 700; }
+.method-color-patch { color: #8b5cf6 !important; font-weight: 700; }
+.method-color-ws { color: #f97316 !important; font-weight: 700; }
+.method-color-tcp { color: #06b6d4 !important; font-weight: 700; }
+.method-color-udp { color: #8b5cf6 !important; font-weight: 700; }
+.method-color-options,
+.method-color-head { color: var(--text-secondary) !important; font-weight: 700; }
+
 </style>

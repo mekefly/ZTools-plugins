@@ -1,13 +1,8 @@
 <template>
   <div class="ui-tabs">
     <div class="ui-tabs__list">
-      <div
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="ui-tabs__tab"
-        :class="{ 'ui-tabs__tab--active': modelValue === tab.key }"
-        @click="$emit('update:modelValue', tab.key)"
-      >
+      <div v-for="tab in tabs" :key="tab.key" class="ui-tabs__tab"
+        :class="{ 'ui-tabs__tab--active': modelValue === tab.key }" @click="$emit('update:modelValue', tab.key)">
         {{ tab.label }}
         <span v-if="tab.badge !== undefined && tab.badge > 0" class="ui-tabs__badge">
           {{ tab.badge }}

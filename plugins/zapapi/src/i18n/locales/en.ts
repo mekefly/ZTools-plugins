@@ -23,12 +23,14 @@ export default {
     noEnv: 'No environment',
     manageEnv: 'Manage Environments',
     code: 'Code',
+    cookies: 'Cookies',
     collections: 'Collections',
     newRequest: 'New Request',
     saved: 'Saved',
     envManagerTitle: 'Environment Manager',
     codeGeneratorTitle: 'Generate Code',
-    collectionManagerTitle: 'Collection Manager'
+    collectionManagerTitle: 'Collection Manager',
+    cookieManagerTitle: 'Cookie Manager'
   },
 
   sidebar: {
@@ -49,7 +51,7 @@ export default {
   },
 
   request: {
-    urlPlaceholder: 'Enter request URL, supports {variables}',
+    urlPlaceholder: "Enter request URL, supports {'{{'}variables{'}}'}",
     send: 'Send',
     sending: 'Sending...',
     saveRequest: 'Save Request',
@@ -66,6 +68,12 @@ export default {
     addParam: 'Add Parameter',
     addHeader: 'Add Header',
     authType: 'Auth Type',
+    urlMenu: {
+      setVar: 'Set as variable',
+      newTab: 'Open request in new tab',
+      encode: 'Encode URL component',
+      decode: 'Decode URL component'
+    },
     none: 'None',
     bearer: 'Bearer Token',
     basic: 'Basic Auth',
@@ -137,6 +145,14 @@ export default {
     digestUsername: 'Digest Username',
     digestPassword: 'Digest Password',
     digestAlgorithm: 'Digest Algorithm',
+    cookiePolicy: 'Cookie Policy',
+    cookieHint: 'Cookie Jar follows Postman-style behavior. Manual Cookie header takes priority for current request.',
+    cookiePolicyInherit: 'Inherit global settings',
+    cookiePolicyEnable: 'Always enable cookie jar',
+    cookiePolicyDisable: 'Disable for this request',
+    cookiePolicyInheritDesc: 'Use global cookie settings from Settings panel.',
+    cookiePolicyEnableDesc: 'Force-enable cookie jar for this request.',
+    cookiePolicyDisableDesc: 'Do not send or store cookies for this request.',
     noBody: 'This request does not have a body',
     invalidHttpUrl: 'Invalid request URL. Enter a valid host or URL.',
     invalidHttpProtocol: 'Only HTTP/HTTPS URLs are supported',
@@ -207,7 +223,6 @@ export default {
     timeLabel: 'Time',
     sizeLabel: 'Size',
     searchPlaceholder: 'Search JSON key/value/path',
-    download: 'Download',
     copyField: 'Copy field',
     copyKey: 'Copy key',
     copyPath: 'Copy path',
@@ -232,7 +247,8 @@ export default {
     search: 'Search',
     filterPlaceholder: 'Filter',
     copy: 'Copy',
-    noCookies: 'No cookies'
+    noCookies: 'No cookies',
+    addCookiesToJar: 'Add to Cookie Jar'
   },
 
   env: {
@@ -257,6 +273,15 @@ export default {
 
   code: {
     curl: 'cURL',
+    wget: 'wget',
+    powershell: 'PowerShell',
+    php: 'PHP',
+    ruby: 'Ruby',
+    c: 'C (libcurl)',
+    cpp: 'C++ (libcurl)',
+    csharp: 'C#',
+    kotlin: 'Kotlin',
+    rust: 'Rust',
     javascript: 'JavaScript',
     javascriptWs: 'JavaScript (WebSocket)',
     javascriptNode: 'JavaScript (Node)',
@@ -284,6 +309,10 @@ export default {
     theme: 'Theme',
     language: 'Language',
     accessibility: 'Guidance & Shortcuts',
+    cookiesEnabled: 'Enable cookie jar',
+    persistSessionCookies: 'Persist session cookies',
+    clearCookies: 'Clear all cookies',
+    clearCookiesHint: 'Remove all persisted cookies from local jar',
     openShortcuts: 'View Shortcuts',
     replayOnboarding: 'Replay Onboarding',
     shortcutsEnabled: 'Enable global shortcuts',
@@ -298,6 +327,18 @@ export default {
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+
+  cookies: {
+    searchPlaceholder: 'Search cookies by domain/name/value/path',
+    refresh: 'Refresh',
+    clearAll: 'Clear all',
+    clearAllConfirm: 'This will remove all cookies from the local jar. Continue?',
+    clearDomain: 'Clear domain',
+    empty: 'No cookies in jar',
+    session: 'Session',
+    copy: 'Copy',
+    copied: 'Copied!'
   },
 
   shortcuts: {
@@ -379,6 +420,22 @@ export default {
       shortcuts: {
         title: 'Shortcuts Entry',
         desc: 'Click here anytime to view all shortcuts. You can also press ? to open it instantly.'
+      },
+      code: {
+        title: 'Code Generator',
+        desc: 'One click to generate cURL, Node.js, Python, or Go snippets regardless of how complex your request might be.'
+      },
+      method: {
+        title: 'Method & Socket',
+        desc: 'Select standard HTTP methods here. It natively supports WS, TCP, and UDP Socket testing as well!'
+      },
+      config: {
+        title: 'Request Configuration',
+        desc: 'Use forms here to configure parameters, headers, Auth mechanisms, and structured request bodies.'
+      },
+      settings: {
+        title: 'Global Settings',
+        desc: 'Access global preferences here to manage theme options, shortcuts, and global Cookie strategy.'
       }
     }
   },
@@ -406,7 +463,9 @@ export default {
     deleteCollection: 'Delete this collection?',
     deleteCollectionMsg: 'This action cannot be undone. All requests in this collection will also be deleted.',
     deleteRequest: 'Delete this request?',
-    deleteRequestMsg: 'This action cannot be undone.'
+    deleteRequestMsg: 'This action cannot be undone.',
+    clearHistory: 'Clear all history?',
+    clearHistoryMsg: 'This action cannot be undone. All history records will be permanently removed.'
   },
 
   history: {

@@ -23,12 +23,14 @@ export default {
     noEnv: '無環境',
     manageEnv: '管理環境',
     code: '程式碼',
+    cookies: 'Cookies',
     collections: '集合',
     newRequest: '新請求',
     saved: '已儲存',
     envManagerTitle: '環境管理',
     codeGeneratorTitle: '產生程式碼',
-    collectionManagerTitle: '集合管理'
+    collectionManagerTitle: '集合管理',
+    cookieManagerTitle: 'Cookie 管理'
   },
 
   sidebar: {
@@ -49,7 +51,7 @@ export default {
   },
 
   request: {
-    urlPlaceholder: '輸入請求 URL，支援 {變數}',
+    urlPlaceholder: "輸入請求 URL，支援 {'{{'}變數{'}}'}",
     send: '發送',
     sending: '發送中',
     saveRequest: '儲存請求',
@@ -66,6 +68,12 @@ export default {
     addParam: '新增參數',
     addHeader: '新增 Header',
     authType: '認證類型',
+    urlMenu: {
+      setVar: '設定為變數',
+      newTab: '在新標籤頁中打開請求',
+      encode: '編碼 URL 組件',
+      decode: '解碼 URL 組件'
+    },
     none: '無認證',
     bearer: 'Bearer Token',
     basic: 'Basic Auth',
@@ -137,6 +145,14 @@ export default {
     digestUsername: 'Digest 使用者名稱',
     digestPassword: 'Digest 密碼',
     digestAlgorithm: 'Digest 演算法',
+    cookiePolicy: 'Cookie 策略',
+    cookieHint: 'Cookie Jar 採用 Postman 風格行為。手動設定的 Cookie Header 會在目前請求中優先。',
+    cookiePolicyInherit: '繼承全域設定',
+    cookiePolicyEnable: '一律啟用 Cookie Jar',
+    cookiePolicyDisable: '此請求停用',
+    cookiePolicyInheritDesc: '使用設定面板中的全域 Cookie 設定。',
+    cookiePolicyEnableDesc: '強制為此請求啟用 Cookie Jar。',
+    cookiePolicyDisableDesc: '此請求不傳送也不儲存 Cookie。',
     noBody: '此請求未使用請求體',
     invalidHttpUrl: '請求 URL 無效，請輸入有效位址或主機名稱',
     invalidHttpProtocol: '僅支援 HTTP/HTTPS 協議',
@@ -207,7 +223,6 @@ export default {
     timeLabel: '時間',
     sizeLabel: '大小',
     searchPlaceholder: '搜尋 JSON 欄位/值/路徑',
-    download: '下載回應',
     copyField: '複製欄位',
     copyKey: '複製鍵名',
     copyPath: '複製路徑',
@@ -232,7 +247,8 @@ export default {
     search: '搜尋',
     filterPlaceholder: '篩選',
     copy: '複製',
-    noCookies: '暫無 Cookies'
+    noCookies: '暫無 Cookies',
+    addCookiesToJar: '添加到 Cookie Jar'
   },
 
   env: {
@@ -257,6 +273,15 @@ export default {
 
   code: {
     curl: 'cURL',
+    wget: 'wget',
+    powershell: 'PowerShell',
+    php: 'PHP',
+    ruby: 'Ruby',
+    c: 'C (libcurl)',
+    cpp: 'C++ (libcurl)',
+    csharp: 'C#',
+    kotlin: 'Kotlin',
+    rust: 'Rust',
     javascript: 'JavaScript',
     javascriptWs: 'JavaScript (WebSocket)',
     javascriptNode: 'JavaScript (Node)',
@@ -284,6 +309,10 @@ export default {
     theme: '主題模式',
     language: '語言',
     accessibility: '引導與快捷鍵',
+    cookiesEnabled: '啟用 Cookie Jar',
+    persistSessionCookies: '持久化工作階段 Cookie',
+    clearCookies: '清除全部 Cookie',
+    clearCookiesHint: '移除本機 Jar 中所有持久化 Cookie',
     openShortcuts: '檢視快捷鍵',
     replayOnboarding: '重新播放新手引導',
     shortcutsEnabled: '啟用全域快捷鍵',
@@ -298,6 +327,18 @@ export default {
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+
+  cookies: {
+    searchPlaceholder: '依網域/名稱/值/路徑搜尋 Cookie',
+    refresh: '重新整理',
+    clearAll: '清除全部',
+    clearAllConfirm: '將從本機 Jar 移除所有 Cookie，是否繼續？',
+    clearDomain: '清除此網域',
+    empty: 'Cookie Jar 為空',
+    session: '工作階段',
+    copy: '複製',
+    copied: '已複製!'
   },
 
   shortcuts: {
@@ -379,6 +420,22 @@ export default {
       shortcuts: {
         title: '快捷鍵入口',
         desc: '點擊此處可隨時查看完整快捷鍵清單。輸入 ? 也能快速開啟。'
+      },
+      code: {
+        title: '程式碼產生器',
+        desc: '不論設定多複雜的請求頭和請求體，一鍵即可產生 cURL、Node.js、Python、Go 等多語言程式碼。'
+      },
+      method: {
+        title: '請求方法與 Socket',
+        desc: '在此選擇常見的 HTTP 請求方法。同時也支援原生 WS、TCP、UDP Socket 測試！'
+      },
+      config: {
+        title: '請求設定區',
+        desc: '透過清晰的表單在此設定 URL 參數、Headers、Auth 驗證機制以及結構化的請求體。'
+      },
+      settings: {
+        title: '系統設定',
+        desc: '點擊進入系統設定，管理主題模式、快捷鍵開關及全域 Cookie 策略等偏好。'
       }
     }
   },
@@ -406,7 +463,9 @@ export default {
     deleteCollection: '確定要刪除這個集合嗎？',
     deleteCollectionMsg: '此操作不可撤銷，集合內的所有請求也將被刪除。',
     deleteRequest: '確定要刪除這個請求嗎？',
-    deleteRequestMsg: '此操作不可撤銷。'
+    deleteRequestMsg: '此操作不可撤銷。',
+    clearHistory: '確定要清空歷史記錄嗎？',
+    clearHistoryMsg: '此操作不可撤銷，所有歷史記錄將被永久刪除。'
   },
 
   history: {

@@ -52,6 +52,9 @@ export interface RequestState {
     digestAlgorithm: 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess'
   }
   body: RequestBodyState
+  cookiePolicy: {
+    mode: 'inherit' | 'enable' | 'disable'
+  }
   socket: {
     status: 'disconnected' | 'connecting' | 'connected'
     messages: Array<{ id: string; type: 'sent' | 'received' | 'system'; data: string; time: number }>
@@ -65,6 +68,7 @@ export interface ResponseState {
   time: number | null
   size: number | null
   headers: Record<string, string>
+  headersRaw: Array<{ name: string; value: string }>
   body: string
   raw: string
   error: string | null
@@ -107,6 +111,9 @@ const defaultRequest: RequestState = {
     formData: [],
     binary: {}
   },
+  cookiePolicy: {
+    mode: 'inherit'
+  },
   socket: {
     status: 'disconnected',
     messages: [],
@@ -120,6 +127,7 @@ const defaultResponse: ResponseState = {
   time: null,
   size: null,
   headers: {},
+  headersRaw: [],
   body: '',
   raw: '',
   error: null,
@@ -230,6 +238,10 @@ function normalizeRequestState(data: Partial<RequestState>): RequestState {
     },
     body: {
       ...normalizeBodyState(data.body)
+    },
+    cookiePolicy: {
+      ...defaultRequest.cookiePolicy,
+      ...data.cookiePolicy
     },
     params: data.params ? cloneState(data.params) : [],
     headers: data.headers ? cloneState(data.headers) : [],

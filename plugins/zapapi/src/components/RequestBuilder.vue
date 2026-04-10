@@ -1,84 +1,81 @@
 <template>
-  <div class="request-builder" :class="{ 'request-builder--with-response': hasResponse, 'request-builder--response-collapsed': responseCollapsed }">
+  <div class="request-builder"
+    :class="{ 'request-builder--with-response': hasResponse, 'request-builder--response-collapsed': responseCollapsed }">
     <div class="request-bar">
-      <UiSelect v-model="request.method" :options="methodOptions" class="request-bar__method" />
-      <UiVariableInput
-        ref="requestUrlInputRef"
-        data-tour-id="request-url"
-        data-shortcut-id="request-url-input"
-        v-model="request.url"
-        :placeholder="t('request.urlPlaceholder')"
-        class="request-bar__url"
-        @keydown="(e: KeyboardEvent) => e.key === 'Enter' && (!isSocket ? $emit('send') : (request.socket.status === 'connected' ? $emit('disconnect') : $emit('connect')))"
-      />
+      <UiSelect data-tour-id="request-method" variant="method" v-model="request.method" :options="methodOptions" class="request-bar__method" />
+      <UiVariableInput ref="requestUrlInputRef" data-tour-id="request-url" data-shortcut-id="request-url-input"
+        v-model="request.url" :placeholder="t('request.urlPlaceholder')" class="request-bar__url"
+        @mouseup="handleUrlSelection"
+        @keydown="(e: KeyboardEvent) => e.key === 'Enter' && (!isSocket ? $emit('send') : (request.socket.status === 'connected' ? $emit('disconnect') : $emit('connect')))" />
       <template v-if="!isSocket">
-        <UiButton data-tour-id="request-send" variant="primary" size="sm" class="request-bar__send" :disabled="sending || !request.url" @click="$emit('send')">
-          <svg v-if="!sending" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        <UiButton data-tour-id="request-send" variant="primary" size="sm" class="request-bar__send"
+          :disabled="sending || !request.url" :icon-only="!sidebarCollapsed" @click="$emit('send')">
+          <svg v-if="!sending" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
-          <svg v-else class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+          <svg v-else class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5">
+            <path d="M21 12a9 9 0 11-6.219-8.56" />
           </svg>
-          {{ sending ? t('request.sending') : t('request.send') }}
+          <span v-if="sidebarCollapsed">{{ sending ? t('request.sending') : t('request.send') }}</span>
         </UiButton>
       </template>
       <template v-else>
-        <UiButton
-          variant="primary" size="sm" class="request-bar__send"
-          :disabled="!request.url || request.socket.status === 'connecting'"
-          @click="request.socket.status === 'connected' ? $emit('disconnect') : $emit('connect')"
-        >
+        <UiButton variant="primary" size="sm" class="request-bar__send"
+          :disabled="!request.url || request.socket.status === 'connecting'" :icon-only="!sidebarCollapsed"
+          @click="request.socket.status === 'connected' ? $emit('disconnect') : $emit('connect')">
           <template v-if="request.socket.status === 'connecting'">
-            <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M21 12a9 9 0 11-6.219-8.56"/>
+            <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5">
+              <path d="M21 12a9 9 0 11-6.219-8.56" />
             </svg>
-            {{ t('socket.connecting') }}
+            <span v-if="sidebarCollapsed">{{ t('socket.connecting') }}</span>
           </template>
           <template v-else-if="request.socket.status === 'connected'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
             </svg>
-            {{ t('socket.disconnect') }}
+            <span v-if="sidebarCollapsed">{{ t('socket.disconnect') }}</span>
           </template>
           <template v-else>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            {{ t('socket.connect') }}
+            <span v-if="sidebarCollapsed">{{ t('socket.connect') }}</span>
           </template>
         </UiButton>
       </template>
-      <UiButton data-tour-id="request-save" variant="secondary" size="sm" class="request-bar__save" :disabled="sending" @click="$emit('save')">
+      <UiButton data-tour-id="request-save" variant="secondary" size="sm" class="request-bar__save" :disabled="sending"
+        :icon-only="!sidebarCollapsed" @click="$emit('save')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/>
-          <polyline points="7 3 7 8 15 8"/>
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
         </svg>
-        {{ t('common.save') }}
+        <span v-if="sidebarCollapsed">{{ t('common.save') }}</span>
       </UiButton>
-      <UiButton v-if="sending" variant="warning" size="sm" class="request-bar__cancel" @click="$emit('cancel')">
+      <UiButton v-if="sending" variant="warning" size="sm" class="request-bar__cancel" :icon-only="!sidebarCollapsed"
+        @click="$emit('cancel')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-          <circle cx="12" cy="12" r="9"/>
-          <line x1="9" y1="9" x2="15" y2="15"/>
-          <line x1="15" y1="9" x2="9" y2="15"/>
+          <circle cx="12" cy="12" r="9" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+          <line x1="15" y1="9" x2="9" y2="15" />
         </svg>
-        {{ t('request.cancel') }}
+        <span v-if="sidebarCollapsed">{{ t('request.cancel') }}</span>
       </UiButton>
     </div>
 
-    <UiTabs v-model="activeTab" :tabs="currentTabs">
+    <UiTabs data-tour-id="request-config-tabs" v-model="activeTab" :tabs="currentTabs">
       <template #default="{ activeTab: tab }">
         <div v-if="tab === 'messages'" class="tab-content tab-content--no-pad socket-messages-tab">
           <div ref="socketMessagesListRef" class="socket-messages-list" @scroll="onSocketMessagesScroll">
             <div v-if="request.socket.messages.length === 0" class="socket-empty">
               {{ t('socket.emptyMessages') }}
             </div>
-            <div
-              v-for="msg in request.socket.messages"
-              :key="msg.id"
-              class="socket-message"
-              :class="'socket-message--' + msg.type"
-            >
+            <div v-for="msg in request.socket.messages" :key="msg.id" class="socket-message"
+              :class="'socket-message--' + msg.type">
               <div class="socket-message__meta">
                 <span class="socket-message__type">{{ socketMessageTypeLabel(msg.type) }}</span>
                 <span class="socket-message__time">{{ new Date(msg.time).toLocaleTimeString() }}</span>
@@ -92,20 +89,12 @@
             </UiButton>
           </div>
           <div class="socket-compose">
-              <UiTextarea
-                v-model="socketMessage"
-                :placeholder="t('socket.messagePlaceholder')"
-                :rows="4"
-                @keydown="(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { $emit('socketSend', socketMessage); socketMessage = ''; } }"
-              />
+            <UiTextarea v-model="socketMessage" :placeholder="t('socket.messagePlaceholder')" :rows="4"
+              @keydown="(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { $emit('socketSend', socketMessage); socketMessage = ''; } }" />
             <div class="socket-compose-actions">
               <span class="socket-compose-hint">{{ t('socket.sendHint') }}</span>
-              <UiButton
-                variant="primary"
-                size="sm"
-                :disabled="!socketMessage || request.socket.status !== 'connected'"
-                @click="$emit('socketSend', socketMessage); socketMessage = '';"
-              >
+              <UiButton variant="primary" size="sm" :disabled="!socketMessage || request.socket.status !== 'connected'"
+                @click="$emit('socketSend', socketMessage); socketMessage = '';">
                 {{ t('socket.send') }}
               </UiButton>
             </div>
@@ -113,28 +102,34 @@
         </div>
 
         <div v-if="tab === 'params'" class="tab-content tab-content--no-pad tab-content--fill">
-            <UiTableEditor
-              :rows="request.params"
-              :key-label="t('request.paramName')"
-              :value-label="t('request.value')"
-              :key-placeholder="t('request.paramKeyPlaceholder')"
-              :value-placeholder="t('request.paramValuePlaceholder')"
-              @update:rows="(rows) => request.params = rows"
-            />
+          <UiTableEditor :rows="request.params" :key-label="t('request.paramName')" :value-label="t('request.value')"
+            :key-placeholder="t('request.paramKeyPlaceholder')" :value-placeholder="t('request.paramValuePlaceholder')"
+            @update:rows="(rows) => request.params = rows" />
         </div>
         <div v-if="tab === 'headers'" class="tab-content tab-content--no-pad tab-content--fill">
-          <UiTableEditor
-            :rows="request.headers"
-            :key-label="t('request.headerPlaceholder')"
-            :value-label="t('request.value')"
-              :key-suggestions="commonHeaderKeys"
-              :value-suggestions-map="headerValueSuggestionsMap"
-              suggestion-scope="headers"
-              value-suggestion-scope="headers"
-              :key-placeholder="t('request.headerKeyPlaceholder')"
-              :value-placeholder="t('request.headerValuePlaceholder')"
-              @update:rows="(rows) => request.headers = rows"
-            />
+          <UiTableEditor :rows="request.headers" :key-label="t('request.headerPlaceholder')"
+            :value-label="t('request.value')" :key-suggestions="commonHeaderKeys"
+            :value-suggestions-map="headerValueSuggestionsMap" suggestion-scope="headers"
+            value-suggestion-scope="headers" :key-placeholder="t('request.headerKeyPlaceholder')"
+            :value-placeholder="t('request.headerValuePlaceholder')" @update:rows="(rows) => request.headers = rows" />
+        </div>
+        <div v-if="tab === 'cookies'" class="tab-content tab-content--no-pad tab-content--fill">
+          <div class="auth-editor">
+            <div class="auth-layout">
+              <div class="auth-panel-left">
+                <div class="auth-field">
+                  <span class="auth-field__label">{{ t('request.cookiePolicy') }}</span>
+                  <UiSelect v-model="request.cookiePolicy.mode" :options="cookiePolicyOptions" />
+                </div>
+                <p class="auth-description">{{ cookiePolicyDescription }}</p>
+              </div>
+              <div class="auth-panel-right">
+                <div class="auth-empty">
+                  {{ t('request.cookieHint') }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div v-if="tab === 'auth'" class="tab-content tab-content--no-pad tab-content--fill">
           <div class="auth-editor">
@@ -146,33 +141,39 @@
                 </div>
                 <div class="auth-description-head">
                   <span class="auth-description-icon" aria-hidden="true">
-                    <svg v-if="request.auth.type === 'bearer'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z"/>
-                      <path d="M9 12l2 2 4-4"/>
+                    <svg v-if="request.auth.type === 'bearer'" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="2">
+                      <path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z" />
+                      <path d="M9 12l2 2 4-4" />
                     </svg>
-                    <svg v-else-if="request.auth.type === 'basic'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="8" r="3"/>
-                      <path d="M4 20a8 8 0 0 1 16 0"/>
+                    <svg v-else-if="request.auth.type === 'basic'" width="14" height="14" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="8" r="3" />
+                      <path d="M4 20a8 8 0 0 1 16 0" />
                     </svg>
-                    <svg v-else-if="request.auth.type === 'apikey'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="8" cy="15" r="4"/>
-                      <path d="M12 15h9"/>
-                      <path d="M18 12v6"/>
+                    <svg v-else-if="request.auth.type === 'apikey'" width="14" height="14" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="8" cy="15" r="4" />
+                      <path d="M12 15h9" />
+                      <path d="M18 12v6" />
                     </svg>
-                    <svg v-else-if="request.auth.type === 'jwt-bearer'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="4" width="18" height="16" rx="2"/>
-                      <path d="M7 10h10"/>
-                      <path d="M7 14h7"/>
+                    <svg v-else-if="request.auth.type === 'jwt-bearer'" width="14" height="14" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M7 10h10" />
+                      <path d="M7 14h7" />
                     </svg>
-                    <svg v-else-if="request.auth.type === 'digest'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="9"/>
-                      <circle cx="12" cy="12" r="4"/>
-                      <path d="M12 3v2"/>
+                    <svg v-else-if="request.auth.type === 'digest'" width="14" height="14" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 3v2" />
                     </svg>
-                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="9"/>
-                      <line x1="9" y1="9" x2="15" y2="15"/>
-                      <line x1="15" y1="9" x2="9" y2="15"/>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <line x1="9" y1="9" x2="15" y2="15" />
+                      <line x1="15" y1="9" x2="9" y2="15" />
                     </svg>
                   </span>
                   <span class="auth-description-title">{{ authTypeLabel }}</span>
@@ -222,22 +223,27 @@
                   </div>
                   <div class="auth-field">
                     <span class="auth-field__label">{{ t('request.jwtPayload') }}</span>
-                    <UiTextarea v-model="request.auth.jwtPayload" :rows="4" :placeholder="t('request.jwtPayloadPlaceholder')" />
+                    <UiTextarea v-model="request.auth.jwtPayload" :rows="4"
+                      :placeholder="t('request.jwtPayloadPlaceholder')" />
                   </div>
                   <button type="button" class="auth-advanced-toggle" @click="jwtAdvancedOpen = !jwtAdvancedOpen">
-                    <svg class="auth-advanced-toggle__icon" :class="{ 'auth-advanced-toggle__icon--open': jwtAdvancedOpen }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                      <polyline points="6 9 12 15 18 9"/>
+                    <svg class="auth-advanced-toggle__icon"
+                      :class="{ 'auth-advanced-toggle__icon--open': jwtAdvancedOpen }" width="12" height="12"
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <polyline points="6 9 12 15 18 9" />
                     </svg>
                     {{ t('request.jwtAdvanced') }}
                   </button>
                   <div v-if="jwtAdvancedOpen" class="auth-advanced-panel">
                     <div class="auth-field">
                       <span class="auth-field__label">{{ t('request.jwtHeaderPrefix') }}</span>
-                      <UiInput v-model="request.auth.jwtHeaderPrefix" :placeholder="t('request.jwtHeaderPrefixPlaceholder')" />
+                      <UiInput v-model="request.auth.jwtHeaderPrefix"
+                        :placeholder="t('request.jwtHeaderPrefixPlaceholder')" />
                     </div>
                     <div class="auth-field">
                       <span class="auth-field__label">{{ t('request.jwtHeader') }}</span>
-                      <UiTextarea v-model="request.auth.jwtHeader" :rows="3" :placeholder="t('request.jwtHeaderPlaceholder')" />
+                      <UiTextarea v-model="request.auth.jwtHeader" :rows="3"
+                        :placeholder="t('request.jwtHeaderPlaceholder')" />
                     </div>
                     <div class="auth-inline-controls">
                       <label class="auth-inline-check">
@@ -250,11 +256,8 @@
                         <input v-model="request.auth.jwtAutoExp" type="checkbox" />
                         <span>{{ t('request.jwtAutoExp') }}</span>
                       </label>
-                      <UiInput
-                        v-model="request.auth.jwtExpSeconds"
-                        :disabled="!request.auth.jwtAutoExp"
-                        :placeholder="t('request.jwtExpSeconds')"
-                      />
+                      <UiInput v-model="request.auth.jwtExpSeconds" :disabled="!request.auth.jwtAutoExp"
+                        :placeholder="t('request.jwtExpSeconds')" />
                     </div>
                   </div>
                   <div class="auth-preview">
@@ -272,7 +275,8 @@
                   </div>
                   <div class="auth-field">
                     <span class="auth-field__label">{{ t('request.digestPassword') }}</span>
-                    <UiInput v-model="request.auth.digestPassword" type="password" :placeholder="t('request.password')" />
+                    <UiInput v-model="request.auth.digestPassword" type="password"
+                      :placeholder="t('request.password')" />
                   </div>
                   <div class="auth-field">
                     <span class="auth-field__label">{{ t('request.digestAlgorithm') }}</span>
@@ -290,45 +294,35 @@
           <div class="body-editor">
             <div class="body-type-selector">
               <div class="body-type-pills">
-                <div
-                  v-for="opt in bodyKindOptions"
-                  :key="opt.value"
-                  class="body-type-pill"
-                  :class="{ active: request.body.kind === opt.value }"
-                  @click="setBodyKind(opt.value)"
-                >
+                <div v-for="opt in bodyKindOptions" :key="opt.value" class="body-type-pill"
+                  :class="{ active: request.body.kind === opt.value }" @click="setBodyKind(opt.value)">
                   {{ opt.label }}
                 </div>
               </div>
               <div v-if="request.body.kind !== 'none'" class="body-content-type">
                 <span class="body-content-type__label">{{ t('request.contentTypeShort') }}</span>
-                <UiSelect
-                  :model-value="request.body.contentType"
-                  :options="bodyContentTypeOptions"
+                <UiSelect :model-value="request.body.contentType" :options="bodyContentTypeOptions"
                   class="body-content-type__select"
-                  @update:model-value="onBodyContentTypeChange(String($event || ''))"
-                />
-                <span v-if="contentTypeOverridden" class="body-content-type__overridden">{{ t('request.contentTypeOverridden') }}</span>
+                  @update:model-value="onBodyContentTypeChange(String($event || ''))" />
+                <span v-if="contentTypeOverridden" class="body-content-type__overridden">{{
+                  t('request.contentTypeOverridden') }}</span>
               </div>
             </div>
-            <div v-if="request.body.kind === 'text' || request.body.kind === 'other'" class="body-panel body-panel--editor body-textarea">
-              <UiTextarea
-                v-model="request.body.raw"
-                :placeholder="isJsonLikeContentType ? jsonPlaceholder : t('request.bodyPlaceholder')"
-                :rows="8"
-              />
+            <div v-if="request.body.kind === 'text' || request.body.kind === 'other'"
+              class="body-panel body-panel--editor body-textarea">
+              <UiTextarea v-model="request.body.raw"
+                :placeholder="isJsonLikeContentType ? jsonPlaceholder : t('request.bodyPlaceholder')" :rows="8" />
             </div>
-            <div v-if="request.body.kind === 'structured' && request.body.contentType === 'application/x-www-form-urlencoded'" class="body-panel body-panel--editor body-kv">
-              <UiTableEditor
-                :rows="request.body.formData"
-                :key-label="t('request.fieldName')"
-                :value-label="t('request.value')"
-                :key-placeholder="t('request.fieldKeyPlaceholder')"
+            <div
+              v-if="request.body.kind === 'structured' && request.body.contentType === 'application/x-www-form-urlencoded'"
+              class="body-panel body-panel--editor body-kv">
+              <UiTableEditor :rows="request.body.formData" :key-label="t('request.fieldName')"
+                :value-label="t('request.value')" :key-placeholder="t('request.fieldKeyPlaceholder')"
                 :value-placeholder="t('request.fieldValuePlaceholder')"
-                @update:rows="(rows) => request.body.formData = rows.map(r => ({ ...r, isFile: false }))"
-              />
+                @update:rows="(rows) => request.body.formData = rows.map(r => ({ ...r, isFile: false }))" />
             </div>
-            <div v-if="request.body.kind === 'structured' && request.body.contentType === 'multipart/form-data'" class="body-panel body-panel--editor body-kv formdata-editor">
+            <div v-if="request.body.kind === 'structured' && request.body.contentType === 'multipart/form-data'"
+              class="body-panel body-panel--editor body-kv formdata-editor">
               <div class="formdata-editor__head">
                 <div class="formdata-editor__col formdata-editor__col--check"></div>
                 <div class="formdata-editor__col formdata-editor__col--key">{{ t('request.fieldName') }}</div>
@@ -337,43 +331,30 @@
                 <div class="formdata-editor__col formdata-editor__col--action"></div>
               </div>
               <div class="formdata-editor__body">
-                <div
-                  v-for="(row, index) in formDataRows"
-                  :key="index"
-                  class="formdata-editor__row"
-                  :class="{ 'formdata-editor__row--disabled': !row.enabled }"
-                >
+                <div v-for="(row, index) in formDataRows" :key="index" class="formdata-editor__row"
+                  :class="{ 'formdata-editor__row--disabled': !row.enabled }">
                   <div class="formdata-editor__col formdata-editor__col--check">
                     <div class="formdata-check" :class="{ active: row.enabled }" @click="toggleFormDataRow(index)">
-                      <svg v-if="row.enabled" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                        <polyline points="20 6 9 17 4 12"/>
+                      <svg v-if="row.enabled" width="10" height="10" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
                   </div>
                   <div class="formdata-editor__col formdata-editor__col--key">
-                    <UiInput
-                      :model-value="row.key"
-                      :placeholder="t('request.fieldKeyPlaceholder')"
-                      @update:model-value="updateFormDataField(index, 'key', $event)"
-                      @focus="onFormDataFocus(index)"
-                    />
+                    <UiInput :model-value="row.key" :placeholder="t('request.fieldKeyPlaceholder')"
+                      @update:model-value="updateFormDataField(index, 'key', $event)" @focus="onFormDataFocus(index)" />
                   </div>
                   <div class="formdata-editor__col formdata-editor__col--type">
-                    <UiSelect
-                      :model-value="row.isFile ? 'file' : 'text'"
-                      :options="formDataTypeOptions"
-                      @update:model-value="setFormDataType(index, String($event || 'text'))"
-                    />
+                    <UiSelect :model-value="row.isFile ? 'file' : 'text'" :options="formDataTypeOptions"
+                      @update:model-value="setFormDataType(index, String($event || 'text'))" />
                   </div>
                   <div class="formdata-editor__col">
                     <template v-if="row.isFile">
                       <div class="formdata-file-input">
-                        <input
-                          :ref="(el) => setFileInputRef(el as HTMLInputElement | null, index)"
-                          class="formdata-file-input__native"
-                          type="file"
-                          @change="onFormDataFileChange(index, $event)"
-                        />
+                        <input :ref="(el) => setFileInputRef(el as HTMLInputElement | null, index)"
+                          class="formdata-file-input__native" type="file"
+                          @change="onFormDataFileChange(index, $event)" />
                         <UiButton size="xs" variant="ghost" @click="triggerFileSelect(index)">
                           {{ t('request.selectFile') }}
                         </UiButton>
@@ -383,23 +364,16 @@
                         </UiButton>
                       </div>
                     </template>
-                    <UiInput
-                      v-else
-                      :model-value="row.value"
-                      :placeholder="t('request.fieldValuePlaceholder')"
-                      @update:model-value="updateFormDataField(index, 'value', $event)"
-                    />
+                    <UiInput v-else :model-value="row.value" :placeholder="t('request.fieldValuePlaceholder')"
+                      @update:model-value="updateFormDataField(index, 'value', $event)" />
                   </div>
                   <div class="formdata-editor__col formdata-editor__col--action">
-                    <UiButton
-                      v-if="index < request.body.formData.length - 1"
-                      variant="ghost"
-                      size="xs"
-                      icon-only
-                      @click="removeFormDataRow(index)"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    <UiButton v-if="index < request.body.formData.length - 1" variant="ghost" size="xs" icon-only
+                      @click="removeFormDataRow(index)">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
                     </UiButton>
                   </div>
@@ -407,36 +381,29 @@
               </div>
             </div>
             <div v-if="request.body.kind === 'binary'" class="body-panel body-panel--editor body-binary">
-              <input
-                ref="binaryFileInputRef"
-                class="body-binary__native"
-                type="file"
-                @change="onBinaryFileChange"
-              />
-              <button
-                type="button"
-                class="body-binary-dropzone"
-                :class="{ 'body-binary-dropzone--active': binaryDropActive }"
-                @click="triggerBinarySelect"
-                @dragenter.prevent="onBinaryDragEnter"
-                @dragover.prevent="onBinaryDragOver"
-                @dragleave.prevent="onBinaryDragLeave"
-                @drop.prevent="onBinaryDrop"
-              >
+              <input ref="binaryFileInputRef" class="body-binary__native" type="file" @change="onBinaryFileChange" />
+              <button type="button" class="body-binary-dropzone"
+                :class="{ 'body-binary-dropzone--active': binaryDropActive }" @click="triggerBinarySelect"
+                @dragenter.prevent="onBinaryDragEnter" @dragover.prevent="onBinaryDragOver"
+                @dragleave.prevent="onBinaryDragLeave" @drop.prevent="onBinaryDrop">
                 <span class="body-binary-dropzone__icon" aria-hidden="true">
-                  <svg v-if="request.body.binary.fileName" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-                    <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <path d="M9 13h6"/>
-                    <path d="M9 17h6"/>
+                  <svg v-if="request.body.binary.fileName" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.9">
+                    <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <path d="M9 13h6" />
+                    <path d="M9 17h6" />
                   </svg>
-                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
-                    <path d="M12 16V8"/>
-                    <path d="M8 12h8"/>
-                    <path d="M20 16.5a4.5 4.5 0 0 0-1.6-8.7A5.5 5.5 0 0 0 7.3 9.1 4 4 0 0 0 8 17h12"/>
+                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.1">
+                    <path d="M12 16V8" />
+                    <path d="M8 12h8" />
+                    <path d="M20 16.5a4.5 4.5 0 0 0-1.6-8.7A5.5 5.5 0 0 0 7.3 9.1 4 4 0 0 0 8 17h12" />
                   </svg>
                 </span>
-                <span class="body-binary-dropzone__title">{{ request.body.binary.fileName || t('request.binaryDropTitle') }}</span>
+                <span class="body-binary-dropzone__title">{{ request.body.binary.fileName ||
+                  t('request.binaryDropTitle')
+                  }}</span>
                 <span class="body-binary-dropzone__hint">{{ t('request.binaryDropHint') }}</span>
               </button>
               <div class="body-binary__actions">
@@ -466,6 +433,37 @@
         </div>
       </template>
     </UiTabs>
+
+    <div v-if="showUrlMenu" class="url-context-overlay" @mousedown="closeUrlMenu" @contextmenu.prevent="closeUrlMenu"></div>
+    <div v-if="showUrlMenu" class="url-context-menu" :style="{ left: urlMenuPos.x + 'px', top: urlMenuPos.y + 'px' }" @mousedown.stop>
+      <button class="url-context-item" @click="runUrlMenuAction('var')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        {{ t('request.urlMenu.setVar') }}
+      </button>
+      <button class="url-context-item" @click="runUrlMenuAction('newTab')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="8" width="10" height="10" rx="1"/>
+          <line x1="13" y1="11" x2="13" y2="15"/>
+          <line x1="11" y1="13" x2="15" y2="13"/>
+        </svg>
+        {{ t('request.urlMenu.newTab') }}
+      </button>
+      <button class="url-context-item" @click="runUrlMenuAction('encode')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        {{ t('request.urlMenu.encode') }}
+      </button>
+      <button class="url-context-item" @click="runUrlMenuAction('decode')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+        </svg>
+        {{ t('request.urlMenu.decode') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -484,8 +482,10 @@ import UiTextarea from './ui/UiTextarea.vue'
 import { createJwtToken } from '../utils/jwt'
 import { ensureFileToken, setFormDataFile, clearFormDataFile } from '../utils/formDataFileStore'
 import type { BodyKind } from '../store/request'
+import { useEnvironmentStore } from '../store/environments'
 
 const { t } = useI18n()
+const envStore = useEnvironmentStore()
 
 const props = defineProps<{
   request: RequestState
@@ -493,20 +493,101 @@ const props = defineProps<{
   sending: boolean
   hasResponse: boolean
   responseCollapsed: boolean
+  sidebarCollapsed: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   send: []
   save: []
   cancel: []
   connect: []
   disconnect: []
   socketSend: [message: string]
+  'new-tab-with-url': [url: string]
 }>()
 
 const activeTab = ref('params')
 const socketMessage = ref('')
-const requestUrlInputRef = ref<{ focus: () => void } | null>(null)
+const requestUrlInputRef = ref<{ focus: () => void; inputRef?: HTMLInputElement } | null>(null)
+
+const showUrlMenu = ref(false)
+const urlMenuPos = ref({ x: 0, y: 0 })
+const urlSelection = ref({ start: 0, end: 0, text: '' })
+
+function handleUrlSelection(e: MouseEvent) {
+  nextTick(() => {
+    const inputEl = requestUrlInputRef.value?.inputRef
+    if (!inputEl) {
+      showUrlMenu.value = false
+      return
+    }
+
+    const start = inputEl.selectionStart ?? 0
+    const end = inputEl.selectionEnd ?? 0
+
+    if (start !== end && end > start) {
+      const text = inputEl.value.substring(start, end)
+      urlSelection.value = { start, end, text }
+
+      // Clamp position to viewport
+      const menuW = 220
+      const menuH = 180
+      let x = e.clientX
+      let y = e.clientY + 12
+      if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8
+      if (y + menuH > window.innerHeight) y = e.clientY - menuH - 4
+      urlMenuPos.value = { x, y }
+      showUrlMenu.value = true
+    } else {
+      showUrlMenu.value = false
+    }
+  })
+}
+
+function closeUrlMenu() {
+  showUrlMenu.value = false
+}
+
+function updateUrl(newUrl: string) {
+  props.request.url = newUrl
+}
+
+function runUrlMenuAction(action: 'var' | 'newTab' | 'encode' | 'decode') {
+  const { start, end, text } = urlSelection.value
+  const oldUrl = props.request.url || ''
+
+  if (action === 'encode') {
+    updateUrl(oldUrl.substring(0, start) + encodeURIComponent(text) + oldUrl.substring(end))
+  } else if (action === 'decode') {
+    try {
+      updateUrl(oldUrl.substring(0, start) + decodeURIComponent(text) + oldUrl.substring(end))
+    } catch {
+      // invalid encoding, ignore
+    }
+  } else if (action === 'var') {
+    const varName = text.trim()
+    if (varName) {
+      // Add variable to active environment (create one if none exists)
+      let env = envStore.getActiveEnv()
+      if (!env) {
+        env = envStore.createEnvironment('Default')
+      }
+      // Only add if the variable doesn't already exist
+      const exists = env.variables.some((v) => v.key === varName)
+      if (!exists) {
+        env.variables.push({ key: varName, value: text })
+      }
+      updateUrl(oldUrl.substring(0, start) + `{{${varName}}}` + oldUrl.substring(end))
+    }
+  } else if (action === 'newTab') {
+    emit('new-tab-with-url', text)
+  }
+
+  closeUrlMenu()
+  nextTick(() => {
+    requestUrlInputRef.value?.focus()
+  })
+}
 const JWT_ADVANCED_STORAGE_KEY = 'zapapi_jwt_advanced_open'
 
 function loadJwtAdvancedOpen(): boolean {
@@ -789,9 +870,26 @@ const currentTabs = computed(() => {
   return [
     { key: 'params', label: t('request.params'), badge: enabledParamsCount.value },
     { key: 'headers', label: t('request.headers'), badge: enabledHeadersCount.value },
+    { key: 'cookies', label: t('response.cookies') },
     { key: 'auth', label: t('request.authorization') },
     { key: 'body', label: t('request.body') }
   ]
+})
+
+const cookiePolicyOptions = computed(() => [
+  { label: t('request.cookiePolicyInherit'), value: 'inherit' },
+  { label: t('request.cookiePolicyEnable'), value: 'enable' },
+  { label: t('request.cookiePolicyDisable'), value: 'disable' }
+])
+
+const cookiePolicyDescription = computed(() => {
+  if (props.request.cookiePolicy.mode === 'enable') {
+    return t('request.cookiePolicyEnableDesc')
+  }
+  if (props.request.cookiePolicy.mode === 'disable') {
+    return t('request.cookiePolicyDisableDesc')
+  }
+  return t('request.cookiePolicyInheritDesc')
 })
 
 const authDescription = computed(() => {
@@ -1278,6 +1376,7 @@ watch(
   flex-direction: column;
   height: 100%;
 }
+
 .socket-messages-list {
   flex: 1;
   overflow-y: auto;
@@ -1286,11 +1385,13 @@ watch(
   display: flex;
   flex-direction: column;
 }
+
 .socket-empty {
   color: var(--text-color-secondary);
   text-align: center;
   margin-top: 20px;
 }
+
 .socket-message {
   margin-bottom: 12px;
   border-radius: 4px;
@@ -1298,14 +1399,17 @@ watch(
   word-break: break-all;
   font-family: monospace;
 }
+
 .socket-message--sent {
   background: rgba(40, 167, 69, 0.1);
   border-left: 3px solid #28a745;
 }
+
 .socket-message--received {
   background: rgba(0, 123, 255, 0.1);
   border-left: 3px solid #007bff;
 }
+
 .socket-message--system {
   background: rgba(108, 117, 125, 0.1);
   border-left: 3px solid #6c757d;
@@ -1314,6 +1418,7 @@ watch(
   align-self: center;
   font-size: 11px;
 }
+
 .socket-message__meta {
   font-size: 11px;
   color: var(--text-color-secondary);
@@ -1321,23 +1426,27 @@ watch(
   justify-content: space-between;
   margin-bottom: 4px;
 }
+
 .socket-new-messages {
   display: flex;
   justify-content: center;
   padding: 8px 12px 0;
   background: var(--panel-bg);
 }
+
 .socket-compose {
   border-top: 1px solid var(--border-color);
   padding: 12px;
   background: var(--panel-bg);
 }
+
 .socket-compose-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
 }
+
 .socket-compose-hint {
   font-size: 12px;
   color: var(--text-color-secondary);
@@ -1380,7 +1489,7 @@ watch(
 }
 
 .tab-content,
-.tab-content--fill > :first-child,
+.tab-content--fill> :first-child,
 .socket-messages-list,
 .auth-panel-left,
 .auth-panel-right,
@@ -1391,7 +1500,7 @@ watch(
 }
 
 .tab-content::-webkit-scrollbar,
-.tab-content--fill > :first-child::-webkit-scrollbar,
+.tab-content--fill> :first-child::-webkit-scrollbar,
 .socket-messages-list::-webkit-scrollbar,
 .auth-panel-left::-webkit-scrollbar,
 .auth-panel-right::-webkit-scrollbar,
@@ -1410,7 +1519,7 @@ watch(
   overflow: hidden;
 }
 
-.tab-content--fill > :first-child {
+.tab-content--fill> :first-child {
   flex: 1;
   min-height: 0;
   border-radius: var(--radius-sm);
@@ -1937,7 +2046,58 @@ watch(
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.url-context-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  /* transparent overlay that closes menu on click without blocking propagation */
+}
+
+.url-context-menu {
+  position: fixed;
+  z-index: 10001;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.url-context-item {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.url-context-item:hover {
+  background: var(--bg-elevated);
+}
+
+.url-context-item svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 </style>

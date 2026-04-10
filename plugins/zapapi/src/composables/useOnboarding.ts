@@ -46,10 +46,37 @@ function createDriver(options: UseOnboardingOptions) {
         }
       },
       {
+        element: '[data-tour-id="code-generator"]',
+        popover: {
+          title: options.t('onboarding.steps.code.title'),
+          description: options.t('onboarding.steps.code.desc'),
+          side: 'bottom',
+          align: 'end'
+        }
+      },
+      {
+        element: '[data-tour-id="request-method"]',
+        popover: {
+          title: options.t('onboarding.steps.method.title'),
+          description: options.t('onboarding.steps.method.desc'),
+          side: 'bottom',
+          align: 'start'
+        }
+      },
+      {
         element: '[data-tour-id="request-url"]',
         popover: {
           title: options.t('onboarding.steps.url.title'),
           description: options.t('onboarding.steps.url.desc'),
+          side: 'bottom',
+          align: 'start'
+        }
+      },
+      {
+        element: '[data-tour-id="request-config-tabs"]',
+        popover: {
+          title: options.t('onboarding.steps.config.title'),
+          description: options.t('onboarding.steps.config.desc'),
           side: 'bottom',
           align: 'start'
         }
@@ -86,7 +113,16 @@ function createDriver(options: UseOnboardingOptions) {
         popover: {
           title: options.t('onboarding.steps.shortcuts.title'),
           description: options.t('onboarding.steps.shortcuts.desc'),
-          side: 'bottom',
+          side: 'right',
+          align: 'center'
+        }
+      },
+      {
+        element: '[data-tour-id="settings-entry"]',
+        popover: {
+          title: options.t('onboarding.steps.settings.title'),
+          description: options.t('onboarding.steps.settings.desc'),
+          side: 'right',
           align: 'center'
         }
       }

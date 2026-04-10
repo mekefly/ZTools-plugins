@@ -2,29 +2,33 @@
   <div class="response-viewer" data-tour-id="response-panel">
     <div class="response-topbar">
       <div class="response-main-tabs">
-        <button
-          v-for="item in mainTabs"
-          :key="item.key"
-          type="button"
-          class="response-main-tab"
-          :class="{ 'response-main-tab--active': activeMainTab === item.key }"
-          @click="activeMainTab = item.key"
-        >
+        <button v-for="item in mainTabs" :key="item.key" type="button" class="response-main-tab"
+          :class="{ 'response-main-tab--active': activeMainTab === item.key }" @click="activeMainTab = item.key">
           {{ item.label }}
         </button>
       </div>
       <div class="response-topbar-right">
         <div v-if="response.status !== null" class="response-meta">
-          <span class="meta-pill"><span class="meta-label">{{ t('response.statusLabel') }}</span><UiBadge :variant="statusVariant" size="sm">{{ response.status }} {{ response.statusText }}</UiBadge></span>
-          <span class="meta-pill"><span class="meta-label">{{ t('response.timeLabel') }}</span>{{ response.time }}ms</span>
-          <span class="meta-pill"><span class="meta-label">{{ t('response.sizeLabel') }}</span>{{ formatSize(response.size) }}</span>
+          <span class="meta-item">
+            <span class="meta-label">{{ t('response.statusLabel') }}:</span>
+            <span :class="['meta-value', `meta-value--${statusVariant}`]">
+              {{ response.status }} {{ response.statusText ? `• ${response.statusText}` : '' }}
+            </span>
+          </span>
+          <span class="meta-item">
+            <span class="meta-label">{{ t('response.timeLabel') }}:</span>
+            <span :class="['meta-value', `meta-value--${statusVariant}`]">{{ response.time }} ms</span>
+          </span>
+          <span class="meta-item">
+            <span class="meta-label">{{ t('response.sizeLabel') }}:</span>
+            <span :class="['meta-value', `meta-value--${statusVariant}`]">{{ formatSize(response.size) }}</span>
+          </span>
         </div>
         <div class="response-topbar-actions">
           <UiButton variant="ghost" size="xs" @click="$emit('toggle-collapse')">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-              <polyline points="6 9 12 15 18 9"/>
+              <polyline points="6 9 12 15 18 9" />
             </svg>
-            {{ t('response.collapse') }}
           </UiButton>
         </div>
       </div>
@@ -32,8 +36,9 @@
 
     <div class="response-content">
       <div v-if="sending" class="response-loading">
-        <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M21 12a9 9 0 11-6.219-8.56" />
         </svg>
         <span>{{ t('response.waiting') }}</span>
       </div>
@@ -47,29 +52,53 @@
           <div class="body-toolbar">
             <div class="toolbar-left">
               <UiSelect v-model="viewMode" :options="viewModeOptions" class="toolbar-select" />
-              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showPreview }" @click="showPreview = !showPreview">
+              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showPreview }"
+                @click="showPreview = !showPreview">
                 <span class="toolbar-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
                 </span>
                 <span>{{ t('response.preview') }}</span>
               </button>
+              <button v-if="isImageContent && imagePreviewSrc" type="button" class="toolbar-btn" @click="downloadImage">
+                <span class="toolbar-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </span>
+                <span>{{ t('common.export') }}</span>
+              </button>
             </div>
             <div class="toolbar-right">
-              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showFilterInput }" @click="showFilterInput = !showFilterInput">
+              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showFilterInput }"
+                @click="showFilterInput = !showFilterInput">
                 <span class="toolbar-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12 10 19 14 21 14 12 22 3"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="22 3 2 3 10 12 10 19 14 21 14 12 22 3" />
+                  </svg>
                 </span>
                 <span>{{ t('response.filter') }}</span>
               </button>
-              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showSearchInput }" @click="showSearchInput = !showSearchInput">
+              <button type="button" class="toolbar-btn" :class="{ 'toolbar-btn--active': showSearchInput }"
+                @click="showSearchInput = !showSearchInput">
                 <span class="toolbar-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
                 </span>
                 <span>{{ t('response.search') }}</span>
               </button>
               <button type="button" class="toolbar-btn" @click="copyText(filteredDisplayText)">
                 <span class="toolbar-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
                 </span>
                 <span>{{ t('response.copy') }}</span>
               </button>
@@ -77,13 +106,17 @@
           </div>
 
           <div v-if="showFilterInput || showSearchInput" class="body-subtools">
-            <UiInput v-if="showFilterInput" v-model="filterKeyword" :placeholder="t('response.filterPlaceholder')" class="toolbar-input" />
-            <UiInput v-if="showSearchInput" v-model="searchKeyword" :placeholder="t('response.searchPlaceholder')" class="toolbar-input" />
+            <UiInput v-if="showFilterInput" v-model="filterKeyword" :placeholder="t('response.filterPlaceholder')"
+              class="toolbar-input" />
+            <UiInput v-if="showSearchInput" v-model="searchKeyword" :placeholder="t('response.searchPlaceholder')"
+              class="toolbar-input" />
           </div>
 
           <div class="body-content">
-            <img v-if="showPreview && isImageContent && imagePreviewSrc" :src="imagePreviewSrc" :alt="t('response.imagePreview')" class="image-preview" />
-            <pre v-else class="code-highlight" v-html="highlightedBody || escapeHtml(filteredDisplayText || t('response.emptyBody'))"></pre>
+            <img v-if="showPreview && isImageContent && imagePreviewSrc" :src="imagePreviewSrc"
+              :alt="t('response.imagePreview')" class="image-preview" />
+            <pre v-else class="code-highlight"
+              v-html="highlightedBody || escapeHtml(filteredDisplayText || t('response.emptyBody'))"></pre>
           </div>
         </div>
 
@@ -92,14 +125,19 @@
         </div>
 
         <div v-if="activeMainTab === 'headers'" class="generic-panel headers-panel">
-          <div v-for="(value, key) in response.headers" :key="key" class="header-row">
-            <span class="header-key">{{ key }}</span>
-            <span class="header-value">{{ value }}</span>
-            <UiButton variant="ghost" size="xs" @click="copyText(`${key}: ${value}`)">{{ t('response.copyField') }}</UiButton>
+          <div v-for="(header, index) in headerRows" :key="`${header.name}-${index}`" class="header-row">
+            <span class="header-key">{{ header.name }}</span>
+            <span class="header-value">{{ header.value }}</span>
+            <UiButton variant="ghost" size="xs" @click="copyText(`${header.name}: ${header.value}`)">{{
+              t('response.copyField') }}</UiButton>
           </div>
         </div>
 
         <div v-if="activeMainTab === 'cookies'" class="generic-panel headers-panel">
+          <div class="cookies-toolbar" v-if="cookies.length > 0">
+            <UiButton variant="secondary" size="xs" @click="addCookiesToJar">{{ t('response.addCookiesToJar') }}
+            </UiButton>
+          </div>
           <UiEmpty v-if="cookies.length === 0" :text="t('response.noCookies')" />
           <div v-for="cookie in cookies" :key="cookie" class="header-row">
             <span class="header-value">{{ cookie }}</span>
@@ -112,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ResponseState } from '../store/request'
 import UiBadge from './ui/UiBadge.vue'
@@ -140,6 +178,28 @@ const searchKeyword = ref('')
 const filterKeyword = ref('')
 const showFilterInput = ref(false)
 const showSearchInput = ref(false)
+
+watch(() => props.response, (res) => {
+  if (!res || res.status === null || !res.contentType) return
+  const ct = res.contentType.toLowerCase()
+  if (ct.includes('image/')) {
+    viewMode.value = 'raw'
+    showPreview.value = true
+  } else {
+    showPreview.value = false
+    if (ct.includes('json')) {
+      viewMode.value = 'json'
+    } else if (ct.includes('xml')) {
+      viewMode.value = 'xml'
+    } else if (ct.includes('html')) {
+      viewMode.value = 'html'
+    } else if (ct.includes('javascript') || ct.includes('jsonp')) {
+      viewMode.value = 'javascript'
+    } else {
+      viewMode.value = 'raw'
+    }
+  }
+}, { immediate: true })
 
 const mainTabs = computed(() => [
   { key: 'body' as const, label: t('response.body') },
@@ -204,6 +264,18 @@ const imagePreviewSrc = computed(() => {
   return `data:${contentType};base64,${props.response.base64Body}`
 })
 
+function downloadImage() {
+  if (!imagePreviewSrc.value) return
+  const ext = props.response.contentType?.split('/')[1] || 'png'
+  const filename = `zapapi_image.${ext}`
+  const a = document.createElement('a')
+  a.href = imagePreviewSrc.value
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 const sourceBodyText = computed(() => props.response.body || props.response.raw || '')
 
 const displayBodyText = computed(() => {
@@ -262,14 +334,28 @@ const highlightedBody = computed(() => {
 })
 
 const highlightedRaw = computed(() => {
-  const contentType = props.response.headers?.['content-type'] || props.response.contentType || ''
+  const contentType = props.response.headers?.['content-type'] || findFirstHeaderValue('content-type') || props.response.contentType || ''
   return highlight(props.response.raw || props.response.body || '', contentType, 'auto')
 })
 
+const headerRows = computed(() => {
+  if (props.response.headersRaw && props.response.headersRaw.length > 0) {
+    return props.response.headersRaw
+  }
+
+  return Object.entries(props.response.headers || {}).map(([name, value]) => ({ name, value }))
+})
+
+function findFirstHeaderValue(name: string): string {
+  const matched = headerRows.value.find((item) => item.name.toLowerCase() === name.toLowerCase())
+  return matched?.value || ''
+}
+
 const cookies = computed(() => {
-  return Object.entries(props.response.headers)
-    .filter(([key]) => key.toLowerCase() === 'set-cookie')
-    .flatMap(([, value]) => value.split(/\n|,(?=\s*[^;]+=[^;]+)/g).map((item) => item.trim()).filter(Boolean))
+  return headerRows.value
+    .filter((item) => item.name.toLowerCase() === 'set-cookie')
+    .map((item) => item.value.trim())
+    .filter(Boolean)
 })
 
 function formatSize(bytes: number | null): string {
@@ -298,6 +384,108 @@ async function copyText(value: string): Promise<void> {
     document.execCommand('copy')
     document.body.removeChild(textarea)
   }
+}
+
+function addCookiesToJar() {
+  if (!window.services?.cookiesAdd || !props.response.headers) {
+    return
+  }
+  const url = props.response.headers['x-final-url'] || findFirstHeaderValue('x-final-url') || props.response.headers['url'] || ''
+  if (!url) {
+    return
+  }
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return
+  }
+  const setCookieHeaders = headerRows.value
+    .filter((item) => item.name.toLowerCase() === 'set-cookie')
+    .map((item) => item.value.trim())
+    .filter(Boolean)
+
+  if (setCookieHeaders.length === 0) {
+    return
+  }
+  const cookiesToAdd: Array<{
+    name: string
+    value: string
+    domain: string
+    path: string
+    secure?: boolean
+    httpOnly?: boolean
+    sameSite?: string
+    expiresAt?: number | null
+  }> = []
+  const now = Date.now()
+
+  for (const setCookieValue of setCookieHeaders) {
+    const parts = setCookieValue.split(';').map((p) => p.trim()).filter(Boolean)
+    if (parts.length === 0) continue
+
+    const firstEq = parts[0].indexOf('=')
+    if (firstEq <= 0) continue
+    const name = parts[0].slice(0, firstEq).trim()
+    const value = parts[0].slice(firstEq + 1)
+    if (!name) continue
+
+    let domain = parsedUrl.hostname.toLowerCase()
+    let path = '/'
+    let secure = false
+    let httpOnly = false
+    let sameSite = ''
+    let expiresAt: number | null = null
+
+    for (let i = 1; i < parts.length; i += 1) {
+      const item = parts[i]
+      const eq = item.indexOf('=')
+      const attrName = (eq === -1 ? item : item.slice(0, eq)).trim().toLowerCase()
+      const attrValue = eq === -1 ? '' : item.slice(eq + 1).trim()
+
+      if (attrName === 'domain') {
+        domain = attrValue.toLowerCase().replace(/^\.+/, '')
+        continue
+      }
+      if (attrName === 'path') {
+        path = attrValue.startsWith('/') ? attrValue : '/'
+        continue
+      }
+      if (attrName === 'secure') secure = true
+      if (attrName === 'httponly') httpOnly = true
+      if (attrName === 'samesite') {
+        sameSite = attrValue.charAt(0).toUpperCase() + attrValue.slice(1).toLowerCase()
+        if (sameSite !== 'Strict' && sameSite !== 'Lax' && sameSite !== 'None') sameSite = ''
+        continue
+      }
+      if (attrName === 'max-age') {
+        const seconds = Number.parseInt(attrValue, 10)
+        if (!Number.isNaN(seconds)) {
+          expiresAt = now + Math.max(0, seconds) * 1000
+        }
+        continue
+      }
+      if (attrName === 'expires') {
+        const parsed = Date.parse(attrValue)
+        if (!Number.isNaN(parsed)) {
+          expiresAt = parsed
+        }
+        continue
+      }
+    }
+    cookiesToAdd.push({
+      name,
+      value,
+      domain,
+      path,
+      secure,
+      httpOnly,
+      sameSite: sameSite || undefined,
+      expiresAt
+    })
+  }
+
+  window.services.cookiesAdd(cookiesToAdd)
 }
 </script>
 
@@ -350,7 +538,8 @@ async function copyText(value: string): Promise<void> {
 .response-meta {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  /* gap: 12px; */
+  gap: var(--space-sm)
 }
 
 .response-topbar-right {
@@ -365,22 +554,36 @@ async function copyText(value: string): Promise<void> {
   align-items: center;
 }
 
-.meta-pill {
+.meta-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  gap: 3px;
   font-size: 11px;
-  color: var(--text-secondary);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
 }
 
 .meta-label {
-  font-family: inherit;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+.meta-value {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-weight: 500;
+}
+
+.meta-value--success {
+  color: var(--success-color, #10b981);
+}
+
+.meta-value--error {
+  color: var(--error-color, #f43f5e);
+}
+
+.meta-value--warning {
+  color: var(--warning-color, #f59e0b);
+}
+
+.meta-value--info {
+  color: var(--info-color, #3b82f6);
 }
 
 .response-content {
@@ -475,8 +678,20 @@ async function copyText(value: string): Promise<void> {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   padding: 10px 12px;
+}
+
+.image-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
 }
 
 .code-highlight {
@@ -546,8 +761,13 @@ async function copyText(value: string): Promise<void> {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .response-error-body {
@@ -567,12 +787,5 @@ async function copyText(value: string): Promise<void> {
 
 .response-error-body p {
   margin: 0;
-}
-
-.image-preview {
-  max-width: 100%;
-  max-height: 320px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
 }
 </style>

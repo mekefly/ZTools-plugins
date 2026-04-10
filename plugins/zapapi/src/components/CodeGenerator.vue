@@ -8,26 +8,10 @@
       'code-generator--tabs-right': canScrollRight
     }"
   >
-    <div class="code-language-groups" aria-hidden="true">
-      <span class="code-language-group" :class="{ 'code-language-group--active': !isSocketMethod }">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="9"/>
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="12" y1="3" x2="12" y2="21"/>
-        </svg>
-        {{ t('request.methodGroupHttp') }}
-      </span>
-      <span class="code-language-group" :class="{ 'code-language-group--active': isSocketMethod }">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 12h4l2-5 4 10 2-5h4"/>
-        </svg>
-        {{ t('request.methodGroupSocket') }}
-      </span>
-    </div>
     <UiTabs v-model="activeLang" :tabs="languages" class="code-generator__tabs">
       <template #default>
         <div class="code-output">
-          <pre>{{ generatedCode }}</pre>
+          <pre class="code-highlight" v-html="highlightedCode"></pre>
         </div>
         <div class="code-actions">
           <UiButton variant="primary" size="sm" @click="copyCode">
@@ -49,6 +33,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { generateCode, type CodeLanguage } from '../utils/codeGenerator'
+import { highlightCodeSync, langMap } from '../utils/codeHighlight'
 import type { RequestState } from '../store/request'
 import { useEnvironmentStore } from '../store/environments'
 import { resolveVariables } from '../utils/variableResolver'
@@ -80,6 +65,15 @@ const languages = computed(() => {
   if (isWsMethod.value) {
     return [
       { key: 'curl' as CodeLanguage, label: t('code.curl') },
+      { key: 'wget' as CodeLanguage, label: t('code.wget') },
+      { key: 'powershell' as CodeLanguage, label: t('code.powershell') },
+      { key: 'php' as CodeLanguage, label: t('code.php') },
+      { key: 'ruby' as CodeLanguage, label: t('code.ruby') },
+      { key: 'c' as CodeLanguage, label: t('code.c') },
+      { key: 'cpp' as CodeLanguage, label: t('code.cpp') },
+      { key: 'csharp' as CodeLanguage, label: t('code.csharp') },
+      { key: 'kotlin' as CodeLanguage, label: t('code.kotlin') },
+      { key: 'rust' as CodeLanguage, label: t('code.rust') },
       { key: 'javascript' as CodeLanguage, label: t('code.javascriptWs') },
       { key: 'typescriptFetch' as CodeLanguage, label: t('code.typescriptWs') },
       { key: 'python' as CodeLanguage, label: t('code.python') },
@@ -91,6 +85,15 @@ const languages = computed(() => {
   if (isTcpOrUdpMethod.value) {
     return [
       { key: 'curl' as CodeLanguage, label: t('code.curl') },
+      { key: 'wget' as CodeLanguage, label: t('code.wget') },
+      { key: 'powershell' as CodeLanguage, label: t('code.powershell') },
+      { key: 'php' as CodeLanguage, label: t('code.php') },
+      { key: 'ruby' as CodeLanguage, label: t('code.ruby') },
+      { key: 'c' as CodeLanguage, label: t('code.c') },
+      { key: 'cpp' as CodeLanguage, label: t('code.cpp') },
+      { key: 'csharp' as CodeLanguage, label: t('code.csharp') },
+      { key: 'kotlin' as CodeLanguage, label: t('code.kotlin') },
+      { key: 'rust' as CodeLanguage, label: t('code.rust') },
       { key: 'javascript' as CodeLanguage, label: t('code.javascriptNode') },
       { key: 'typescriptFetch' as CodeLanguage, label: t('code.typescriptNode') },
       { key: 'python' as CodeLanguage, label: t('code.python') },
@@ -101,6 +104,15 @@ const languages = computed(() => {
 
   return [
     { key: 'curl' as CodeLanguage, label: t('code.curl') },
+    { key: 'wget' as CodeLanguage, label: t('code.wget') },
+    { key: 'powershell' as CodeLanguage, label: t('code.powershell') },
+    { key: 'php' as CodeLanguage, label: t('code.php') },
+    { key: 'ruby' as CodeLanguage, label: t('code.ruby') },
+    { key: 'c' as CodeLanguage, label: t('code.c') },
+    { key: 'cpp' as CodeLanguage, label: t('code.cpp') },
+    { key: 'csharp' as CodeLanguage, label: t('code.csharp') },
+    { key: 'kotlin' as CodeLanguage, label: t('code.kotlin') },
+    { key: 'rust' as CodeLanguage, label: t('code.rust') },
     { key: 'javascript' as CodeLanguage, label: t('code.javascript') },
     { key: 'javascriptAxios' as CodeLanguage, label: t('code.javascriptAxios') },
     { key: 'typescriptFetch' as CodeLanguage, label: t('code.typescriptFetch') },
@@ -143,6 +155,17 @@ const generatedCode = computed(() => {
   if (snapshot.auth.apiKey) snapshot.auth.apiKey = resolveVariables(snapshot.auth.apiKey, variables)
   if (snapshot.auth.apiKeyHeader) snapshot.auth.apiKeyHeader = resolveVariables(snapshot.auth.apiKeyHeader, variables)
   return generateCode(snapshot, activeLang.value)
+})
+
+const highlightedCode = computed(() => {
+  const langKey = isSocketMethod.value
+    ? (props.request.method === 'WS' ? 'ws' : props.request.method.toLowerCase())
+    : activeLang.value
+  const code = generatedCode.value
+  if (!code) return ''
+  
+  const lang = langMap[langKey] || 'plaintext'
+  return highlightCodeSync(code, lang)
 })
 
 async function copyCode() {
@@ -256,31 +279,6 @@ watch(languages, (items) => {
   min-height: 0;
 }
 
-.code-language-groups {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.code-language-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  padding: 3px 8px;
-  background: var(--bg-surface);
-}
-
-.code-language-group--active {
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  background: var(--bg-elevated);
-}
-
 .code-generator :deep(.ui-tabs) {
   height: 100%;
 }
@@ -326,7 +324,49 @@ watch(languages, (items) => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--text-primary);
+}
+
+.code-output pre .hljs-keyword,
+.code-output pre .hljs-selector-tag,
+.code-output pre .hljs-literal,
+.code-output pre .hljs-section,
+.code-output pre .hljs-link {
+  color: var(--accent-primary);
+}
+
+.code-output pre .hljs-string,
+.code-output pre .hljs-title,
+.code-output pre .hljs-name,
+.code-output pre .hljs-type,
+.code-output pre .hljs-attribute,
+.code-output pre .hljs-symbol,
+.code-output pre .hljs-bullet,
+.code-output pre .hljs-addition,
+.code-output pre .hljs-variable,
+.code-output pre .hljs-template-tag,
+.code-output pre .hljs-template-variable {
+  color: var(--success-color);
+}
+
+.code-output pre .hljs-comment,
+.code-output pre .hljs-quote,
+.code-output pre .hljs-deletion,
+.code-output pre .hljs-meta {
+  color: var(--text-muted);
+}
+
+.code-output pre .hljs-number,
+.code-output pre .hljs-regexp,
+.code-output pre .hljs-literal,
+.code-output pre .hljs-built_in {
+  color: var(--warning-color);
+}
+
+.code-output pre .hljs-attr,
+.code-output pre .hljs-selector-class,
+.code-output pre .hljs-selector-id,
+.code-output pre .hljs-selector-pseudo {
+  color: #a78bfa;
 }
 
 .code-actions {

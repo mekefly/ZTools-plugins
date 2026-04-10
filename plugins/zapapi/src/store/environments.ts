@@ -152,23 +152,11 @@ export function useEnvironmentStore() {
 
   function getActiveEnv(): Environment | null {
     if (!state.activeEnvId) {
-      const firstEnvironment = state.environments[0]
-      if (firstEnvironment) {
-        state.activeEnvId = firstEnvironment.id
-        return firstEnvironment
-      }
-
       return null
     }
 
     const env = state.environments.find((e) => e.id === state.activeEnvId)
     if (!env) {
-      const firstEnvironment = state.environments[0]
-      if (firstEnvironment) {
-        state.activeEnvId = firstEnvironment.id
-        return firstEnvironment
-      }
-
       state.activeEnvId = null
       return null
     }

@@ -37,6 +37,9 @@ export interface CollectionRequest {
     formData?: Array<{ key: string; value: string; enabled: boolean; isFile: boolean; fileToken?: string }>
     binary?: { fileToken?: string; fileName?: string; fileSize?: number; fileType?: string }
   }
+  cookiePolicy?: {
+    mode: 'inherit' | 'enable' | 'disable'
+  }
   socket: {
     status: 'disconnected' | 'connecting' | 'connected'
     messages: Array<{ id: string; type: 'sent' | 'received' | 'system'; data: string; time: number }>

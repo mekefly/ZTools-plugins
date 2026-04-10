@@ -580,6 +580,485 @@ function buildPython(req: RequestState): string {
   return code
 }
 
+function buildWget(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  let cmd = `wget --method=${req.method} '${escapeSingleQuote(url)}'`
+
+  const headers = collectHeaders(req)
+  Object.entries(headers).forEach(([k, v]) => {
+    cmd += ` \\\n  --header='${escapeSingleQuote(k)}: ${escapeSingleQuote(v)}'`
+  })
+
+  if (isBodyJson(req) && req.body.raw) {
+    cmd += ` \\\n  --post-data='${escapeSingleQuote(req.body.raw)}'`
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    cmd += ` \\\n  --body-data='${escapeSingleQuote(req.body.raw)}'`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      cmd += ` \\\n  --post-data='${escapeSingleQuote(data)}'`
+    }
+  }
+
+  cmd += ' \\\n  -O -'
+  return cmd
+}
+
+function buildPowerShell(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  const params: string[] = []
+  params.push(`Uri = '${escapeSingleQuote(url)}'`)
+  params.push(`Method = '${req.method}'`)
+
+  if (Object.keys(headers).length > 0) {
+    const headersObj = Object.entries(headers)
+      .map(([k, v]) => `        '${escapeSingleQuote(k)}' = '${escapeSingleQuote(v)}'`)
+      .join(',\n')
+    params.push(`Headers = @{\n${headersObj}\n    }`)
+  }
+
+  if (isBodyJson(req) && req.body.raw) {
+    params.push(`Body = '${escapeSingleQuote(req.body.raw)}'`)
+    params.push(`ContentType = 'application/json'`)
+  } else if (isBodyBinary(req) && req.body.binary.fileName) {
+    params.push(`InFile = '${escapeSingleQuote(toFilePathPlaceholder(req.body.binary.fileName))}'`)
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    params.push(`Body = '${escapeSingleQuote(req.body.raw)}'`)
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      params.push(`Body = '${escapeSingleQuote(data)}'`)
+      params.push(`ContentType = 'application/x-www-form-urlencoded'`)
+    }
+  }
+
+  return `$response = Invoke-WebRequest\n@(\n${params.join(',\n')}\n) -UseBasicParsing\n\nWrite-Host "Status: $($response.StatusCode)"\nWrite-Host $response.Content`
+}
+
+function buildPhp(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  let code = '<?php\n\n'
+  code += `$url = "${escapeDoubleQuote(url)}";\n`
+
+  if (Object.keys(headers).length > 0) {
+    const headersArr = Object.entries(headers)
+      .map(([k, v]) => `    "${escapeDoubleQuote(k)}: ${escapeDoubleQuote(v)}"`)
+      .join(',\n')
+    code += `$headers = [\n${headersArr}\n];\n`
+  }
+
+  code += '\n$ch = curl_init();\n'
+  code += `curl_setopt($ch, CURLOPT_URL, $url);\n`
+  code += `curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "${req.method}");\n`
+  code += 'curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n'
+  code += 'curl_setopt($ch, CURLOPT_HEADER, true);\n'
+
+  if (Object.keys(headers).length > 0) {
+    code += 'curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);\n'
+  }
+
+  if (isBodyJson(req) && req.body.raw) {
+    code += `curl_setopt($ch, CURLOPT_POSTFIELDS, '${escapeSingleQuote(req.body.raw)}');\n`
+    code += 'curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge($headers ?? [], ["Content-Type: application/json"]));\n'
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    code += `curl_setopt($ch, CURLOPT_POSTFIELDS, '${escapeSingleQuote(req.body.raw)}');\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      code += `curl_setopt($ch, CURLOPT_POSTFIELDS, '${escapeSingleQuote(data)}');\n`
+    }
+  }
+
+  code += '\n$response = curl_exec($ch);\n'
+  code += '$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);\n'
+  code += '$headers = substr($response, 0, $header_size);\n'
+  code += '$body = substr($response, $header_size);\n'
+  code += '$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);\n'
+  code += 'curl_close($ch);\n\n'
+  code += 'echo "Status: " . $status . "\\n";\n'
+  code += 'echo $body . "\\n";\n'
+  code += '?>'
+
+  return code
+}
+
+function buildRuby(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  let code = 'require "net/http"\n'
+  code += 'require "uri"\n\n'
+  code += `uri = URI("${escapeDoubleQuote(url)}")\n`
+  code += `http = Net::HTTP.new(uri.host, uri.port)\n`
+
+  const methodObj = req.method.toUpperCase()
+  code += `request = Net::HTTP::${methodObj}.new(uri)\n`
+
+  if (Object.keys(headers).length > 0) {
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `request["${escapeDoubleQuote(k)}"] = "${escapeDoubleQuote(v)}"\n`
+    })
+  }
+
+  if (isBodyJson(req) && req.body.raw) {
+    code += `request.body = '${escapeSingleQuote(req.body.raw)}'\n`
+    code += 'request["Content-Type"] = "application/json"\n'
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    code += `request.body = '${escapeSingleQuote(req.body.raw)}'\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      code += `request.body = '${escapeSingleQuote(data)}'\n`
+    }
+  }
+
+  code += '\nresponse = http.request(request)\n'
+  code += 'puts "Status: #{response.code}"\n'
+  code += 'puts response.body'
+
+  return code
+}
+
+function buildC(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  const urlObj = new URL(url)
+  const host = urlObj.hostname
+  const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80')
+  const path = urlObj.pathname + urlObj.search || '/'
+
+  let code = `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\n`
+
+  let bodyPart = ''
+  if (isBodyJson(req) && req.body.raw) {
+    bodyPart = req.body.raw
+    code += `#define BODY "${escapeSingleQuote(bodyPart)}"\n`
+    code += `#define CONTENT_TYPE "application/json"\n`
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    bodyPart = req.body.raw
+    code += `#define BODY "${escapeSingleQuote(bodyPart)}"\n`
+    code += `#define CONTENT_TYPE "text/plain"\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      bodyPart = data
+      code += `#define BODY "${escapeSingleQuote(bodyPart)}"\n`
+      code += `#define CONTENT_TYPE "application/x-www-form-urlencoded"\n`
+    }
+  }
+
+  code += `int main() {\n`
+  code += `    int sock;\n`
+  code += `    struct sockaddr_in server;\n`
+  code += `    struct hostent *he;\n`
+  code += `    char request[4096];\n`
+  code += `    char response[8192];\n\n`
+
+  code += `    he = gethostbyname("${escapeDoubleQuote(host)}");\n`
+  code += `    if (he == NULL) {\n`
+  code += `        fprintf(stderr, "Cannot resolve host\\n");\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    sock = socket(AF_INET, SOCK_STREAM, 0);\n`
+  code += `    if (sock < 0) {\n`
+  code += `        perror("socket");\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    server.sin_family = AF_INET;\n`
+  code += `    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n`
+  code += `    server.sin_port = htons(${port});\n\n`
+
+  code += `    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {\n`
+  code += `        perror("connect");\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    snprintf(request, sizeof(request),\n`
+  code += `        "${req.method.toUpperCase()} ${escapeDoubleQuote(path)} HTTP/1.1\\r\\n"\n`
+  code += `        "Host: ${escapeDoubleQuote(host)}\\r\\n"` + '\n'
+
+  if (Object.keys(headers).length > 0) {
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `        "${escapeDoubleQuote(k)}: ${escapeDoubleQuote(v)}\\r\\n"` + '\n'
+    })
+  }
+
+  code += `#ifdef BODY\n`
+  code += `        "Content-Type: " CONTENT_TYPE "\\r\\n"\n`
+  code += `        "Content-Length: %zu\\r\\n"\n`
+  code += `#endif\n`
+  code += `        "Connection: close\\r\\n\\r\\n"\n`
+  code += `#ifdef BODY\n`
+  code += `        BODY,\n`
+  code += `        strlen(BODY)\n`
+  code += `#endif\n`
+  code += `    );\n\n`
+
+  code += `    send(sock, request, strlen(request), 0);\n\n`
+
+  code += `    int n = recv(sock, response, sizeof(response) - 1, 0);\n`
+  code += `    if (n > 0) {\n`
+  code += `        response[n] = '\\0';\n`
+  code += `        printf("%s\\n", response);\n`
+  code += `    }\n\n`
+
+  code += `    close(sock);\n`
+  code += `    return 0;\n`
+  code += `}\n`
+
+  return code
+}
+
+function buildCpp(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  const urlObj = new URL(url)
+  const host = urlObj.hostname
+  const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80')
+  const path = urlObj.pathname + urlObj.search || '/'
+
+  let code = `#include <iostream>\n#include <string>\n#include <cstring>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\n`
+
+  let bodyPart = ''
+  if (isBodyJson(req) && req.body.raw) {
+    bodyPart = req.body.raw
+    code += `const std::string BODY = "${escapeSingleQuote(bodyPart)}";\n`
+    code += `const std::string CONTENT_TYPE = "application/json";\n`
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    bodyPart = req.body.raw
+    code += `const std::string BODY = "${escapeSingleQuote(bodyPart)}";\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      bodyPart = data
+      code += `const std::string BODY = "${escapeSingleQuote(bodyPart)}";\n`
+    }
+  }
+
+  code += `\nint main() {\n`
+  code += `    int sock = socket(AF_INET, SOCK_STREAM, 0);\n`
+  code += `    if (sock < 0) {\n`
+  code += `        perror("socket");\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    struct hostent *he = gethostbyname("${escapeDoubleQuote(host)}");\n`
+  code += `    if (!he) {\n`
+  code += `        std::cerr << "Cannot resolve host" << std::endl;\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    struct sockaddr_in server;\n`
+  code += `    memset(&server, 0, sizeof(server));\n`
+  code += `    server.sin_family = AF_INET;\n`
+  code += `    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n`
+  code += `    server.sin_port = htons(${port});\n\n`
+
+  code += `    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {\n`
+  code += `        perror("connect");\n`
+  code += `        return 1;\n`
+  code += `    }\n\n`
+
+  code += `    std::string request;\n`
+  code += `    request += "${req.method.toUpperCase()} ${escapeDoubleQuote(path)} HTTP/1.1\\r\\n";\n`
+  code += `    request += "Host: ${escapeDoubleQuote(host)}\\r\\n";\n`
+
+  if (Object.keys(headers).length > 0) {
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `    request += "${escapeDoubleQuote(k)}: ${escapeDoubleQuote(v)}\\r\\n";\n`
+    })
+  }
+
+  code += `#ifdef BODY\n`
+  code += `    request += "Content-Type: " + CONTENT_TYPE + "\\r\\n";\n`
+  code += `    request += "Content-Length: " + std::to_string(BODY.size()) + "\\r\\n";\n`
+  code += `#endif\n`
+  code += `    request += "Connection: close\\r\\n\\r\\n";\n\n`
+
+  code += `#ifdef BODY\n`
+  code += `    request += BODY;\n`
+  code += `#endif\n`
+
+  code += `    send(sock, request.c_str(), request.size(), 0);\n\n`
+
+  code += `    char buffer[8192];\n`
+  code += `    std::string response;\n`
+  code += `    ssize_t n;\n`
+  code += `    while ((n = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {\n`
+  code += `        buffer[n] = '\\0';\n`
+  code += `        response += buffer;\n`
+  code += `    }\n\n`
+
+  code += `    std::cout << response << std::endl;\n`
+  code += `    close(sock);\n`
+  code += `    return 0;\n`
+  code += `}\n`
+
+  return code
+}
+
+function buildCSharp(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  if (isBodyFormData(req)) {
+    return `// C# HttpClient does not support multipart/form-data directly without additional code.\n// Consider using the RestSharp library or manually build the multipart content.\n\nusing System;\nusing System.Net.Http;\n\nclass Program\n{\n    static async Task Main()\n    {\n        using var client = new HttpClient();\n        var request = new HttpRequestMessage(HttpMethod.${req.method}, "${escapeDoubleQuote(url)}");\n\n        // Add headers\n${Object.entries(headers).map(([k, v]) => `        request.Headers.Add("${escapeDoubleQuote(k)}", "${escapeDoubleQuote(v)}");`).join('\n')}
+\n        Console.WriteLine("Request prepared. Add multipart content manually.");\n    }\n}\n`
+  }
+
+  let code = `using System;\nusing System.Net.Http;\nusing System.Threading.Tasks;\n\nclass Program\n{\n    static async Task Main()\n    {\n        using var client = new HttpClient();\n\n        var request = new HttpRequestMessage(HttpMethod.${req.method}, "${escapeDoubleQuote(url)}");\n\n`
+
+  if (Object.keys(headers).length > 0) {
+    code += `        // Add headers\n`
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `        request.Headers.Add("${escapeDoubleQuote(k)}", "${escapeDoubleQuote(v)}");\n`
+    })
+    code += '\n'
+  }
+
+  if (isBodyJson(req) && req.body.raw) {
+    code += `        request.Content = new StringContent(\n            "${escapeDoubleQuote(req.body.raw).replace(/"/g, '\\"')}",\n            System.Text.Encoding.UTF8,\n            "application/json"\n        );\n`
+  } else if (isBodyBinary(req) && req.body.binary.fileName) {
+    code += `        // Binary file: ${toFilePathPlaceholder(req.body.binary.fileName)}\n`
+    code += `        // var content = new ByteArrayContent(File.ReadAllBytes("${escapeDoubleQuote(toFilePathPlaceholder(req.body.binary.fileName))}"));\n`
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    code += `        request.Content = new StringContent(\n            "${escapeDoubleQuote(req.body.raw).replace(/"/g, '\\"')}",\n            System.Text.Encoding.UTF8\n        );\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      code += `        request.Content = new StringContent(\n            "${escapeDoubleQuote(data)}",\n            System.Text.Encoding.UTF8,\n            "application/x-www-form-urlencoded"\n        );\n`
+    }
+  }
+
+  code += `\n        var response = await client.SendAsync(request);\n`
+  code += `        var body = await response.Content.ReadAsStringAsync();\n`
+  code += `        Console.WriteLine($"Status: {(int)response.StatusCode}");\n`
+  code += `        Console.WriteLine(body);\n`
+  code += `    }\n`
+  code += `}`
+
+  return code
+}
+
+function buildKotlin(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  let code = `import java.net.URI\nimport java.net.http.HttpClient\nimport java.net.http.HttpRequest\nimport java.net.http.HttpResponse\n\nfun main() {\n    val client = HttpClient.newBuilder()\n        .build()\n\n`
+
+  code += `    val requestBuilder = HttpRequest.newBuilder()\n        .uri(URI("${escapeDoubleQuote(url)}"))\n        .method("${req.method}", HttpRequest.BodyPublishers.noBody())\n`
+
+  if (Object.keys(headers).length > 0) {
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `        .header("${escapeDoubleQuote(k)}", "${escapeDoubleQuote(v)}")\n`
+    })
+  }
+
+  if (isBodyJson(req) && req.body.raw) {
+    code += `        .header("Content-Type", "application/json")\n`
+    code += `        .POST(HttpRequest.BodyPublishers.ofString("${escapeSingleQuote(req.body.raw)}"))\n`
+  } else if (isBodyBinary(req) && req.body.binary.fileName) {
+    code += `        // Binary file: ${toFilePathPlaceholder(req.body.binary.fileName)}\n`
+    code += `        // val fileBytes = File("${escapeDoubleQuote(toFilePathPlaceholder(req.body.binary.fileName))}").readBytes()\n`
+    code += `        // .POST(HttpRequest.BodyPublishers.ofByteArray(fileBytes))\n`
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    code += `        .POST(HttpRequest.BodyPublishers.ofString("${escapeSingleQuote(req.body.raw)}"))\n`
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) {
+      code += `        .header("Content-Type", "application/x-www-form-urlencoded")\n`
+      code += `        .POST(HttpRequest.BodyPublishers.ofString("${escapeSingleQuote(data)}"))\n`
+    }
+  } else {
+    code += `        .GET()\n`
+  }
+
+  code += `\n    val response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())\n`
+  code += `    println("Status: ${'$'}{response.statusCode()}")\n`
+  code += `    println(response.body())\n`
+  code += `}`
+
+  return code
+}
+
+function buildRust(req: RequestState): string {
+  const url = resolveHttpUrl(req)
+  const headers = collectHeaders(req)
+
+  let code = `use std::io::Read;\nuse std::net::TcpStream;\nuse std::io::Write;\n\nfn main() {\n`
+
+  const urlObj = new URL(url)
+  const host = urlObj.hostname
+  const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80')
+  const path = urlObj.pathname + urlObj.search || '/'
+
+  code += `    let url = "${escapeDoubleQuote(url)}";\n`
+  code += `    let host = "${escapeDoubleQuote(host)}";\n`
+  code += `    let port = ${port};\n`
+  code += `    let path = "${escapeDoubleQuote(path)}";\n\n`
+
+  code += `    let mut stream = TcpStream::connect(format!("{}:{}", host, port)).expect("Failed to connect");\n`
+  code += `    stream.set_read_timeout(Some(std::time::Duration::from_secs(10))).ok();\n\n`
+
+  let bodyPart = ''
+  if (isBodyJson(req) && req.body.raw) {
+    bodyPart = req.body.raw
+  } else if (resolveBodyKind(req) !== 'none' && req.body.raw) {
+    bodyPart = req.body.raw
+  } else if (isBodyUrlencoded(req)) {
+    const data = getEnabledUrlEncodedBody(req)
+    if (data) bodyPart = data
+  }
+
+  code += `    let mut request = format!(\n`
+  code += `        "${req.method.toUpperCase()} {} HTTP/1.1\\r\\n"\n`
+  code += `        "Host: {}\\r\\n"` + '\n'
+
+  if (Object.keys(headers).length > 0) {
+    Object.entries(headers).forEach(([k, v]) => {
+      code += `        "${escapeDoubleQuote(k)}: ${escapeDoubleQuote(v)}\\r\\n"` + '\n'
+    })
+  }
+
+  if (bodyPart) {
+    code += `        "Content-Type: application/json\\r\\n"\n`
+    code += `        "Content-Length: {}\\r\\n"\n`
+    code += `        "Connection: close\\r\\n\\r\\n{}",\n`
+    code += `        path, host, body_part.len(), body_part\n`
+  } else {
+    code += `        "Connection: close\\r\\n\\r\\n",\n`
+    code += `        path, host\n`
+  }
+  code += `    );\n\n`
+
+  code += `    stream.write(request.as_bytes()).expect("Failed to write");\n\n`
+
+  code += `    let mut buffer = [0u8; 8192];\n`
+  code += `    let mut response = String::new();\n`
+  code += `    loop {\n`
+  code += `        match stream.read(&mut buffer) {\n`
+  code += `            Ok(0) => break,\n`
+  code += `            Ok(n) => response.push_str(std::str::from_utf8(&buffer[..n]).unwrap_or("")),\n`
+  code += `            Err(_) => break,\n`
+  code += `        }\n`
+  code += `    }\n\n`
+
+  code += `    println!("{}", response);\n`
+  code += `}\n\n`
+  code += `// Note: For HTTPS, consider using the 'reqwest' crate.\n`
+  code += `// Add to Cargo.toml: reqwest = { version = "0.11", features = ["blocking"] }`
+
+  return code
+}
+
 function buildWsJavaScript(req: RequestState): string {
   const url = resolveWsUrl(req)
   return `const ws = new WebSocket('${escapeSingleQuote(url)}');\n\nws.onopen = () => {\n  console.log('connected');\n  ws.send('hello from client');\n};\n\nws.onmessage = (event) => {\n  console.log('received:', event.data);\n};\n\nws.onerror = (error) => {\n  console.error('WebSocket error:', error);\n};\n\nws.onclose = () => {\n  console.log('disconnected');\n};\n\n// close when needed\n// ws.close();`
@@ -667,6 +1146,203 @@ function buildSocketJava(req: RequestState): string {
   return `import java.net.*;\n\npublic class UdpClient {\n  public static void main(String[] args) throws Exception {\n    try (DatagramSocket socket = new DatagramSocket()) {\n      byte[] payload = "hello from client".getBytes();\n      InetAddress address = InetAddress.getByName("${escapeDoubleQuote(host)}");\n\n      DatagramPacket packet = new DatagramPacket(payload, payload.length, address, ${port});\n      socket.send(packet);\n      System.out.println("sent");\n\n      socket.setSoTimeout(3000);\n      byte[] buf = new byte[4096];\n      DatagramPacket response = new DatagramPacket(buf, buf.length);\n      try {\n        socket.receive(response);\n        System.out.println("received: " + new String(response.getData(), 0, response.getLength()));\n      } catch (SocketTimeoutException e) {\n        System.out.println("no response (timeout)");\n      }\n    }\n  }\n}`
 }
 
+function buildSocketPowerShell(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `# PowerShell WebSocket requires .NET HttpClient with ClientWebSocket\n$uri = [System.Uri]"${escapeSingleQuote(url)}"\n$ws = [System.Net.WebSockets.ClientWebSocket]::new()\n$ct = [Threading.CancellationToken]::None\n$ws.ConnectAsync($uri, $ct).Wait()\n\n$msg = [System.Text.Encoding]::UTF8.GetBytes("hello from client")\n$ws.SendAsync([ArraySegment[byte]]$msg, 'Text', $true, $ct).Wait()\n\n$buf = [byte[]]::new(4096)\n$res = $ws.ReceiveAsync([ArraySegment[byte]]$buf, $ct)\n$res.Wait()\n$text = [System.Text.Encoding]::UTF8.GetString($buf, 0, $res.Result.Count)\nWrite-Host "received: $text"\n\n$ws.CloseAsync('NormalClosure', "", $ct).Wait()`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `# PowerShell TCP using .NET TcpClient\n$host = "${escapeSingleQuote(host)}"\n$port = ${port}\n$client = [System.Net.Sockets.TcpClient]::new()\n$client.Connect($host, $port)\n$stream = $client.GetStream()\n$writer = [System.IO.StreamWriter]::new($stream)\n$reader = [System.IO.StreamReader]::new($stream)\n\n$writer.WriteLine("hello from client")\n$writer.Flush()\n\n$response = $reader.ReadLine()\nWrite-Host "received: $response"\n\n$client.Close()`
+  }
+
+  return `# PowerShell UDP using .NET UdpClient\n$host = "${escapeSingleQuote(host)}"\n$port = ${port}\n$client = [System.Net.Sockets.UdpClient]::new()\n$msg = [System.Text.Encoding]::UTF8.GetBytes("hello from client")\n$client.Send($msg, $msg.Length, $host, $port) | Out-Null\nWrite-Host "sent"\n\n$client.Client.ReceiveTimeout = 3000\ntry {\n    $result = $client.Receive([ref][System.Net.IPEndpoint]::Any)\n    $text = [System.Text.Encoding]::UTF8.GetString($result)\n    Write-Host "received: $text"\n} catch {\n    Write-Host "no response (timeout)"\n}\n$client.Close()`
+}
+
+function buildSocketPhp(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `# PHP WebSocket requires extension (e.g. ratchet) or custom implementation\n// For basic usage, consider using the 'ws' tool: npm install -g ws\n// Then: wscat -c '${escapeSingleQuote(url)}'\n\necho "PHP does not have built-in WebSocket client.\\n";\necho "Install a WebSocket library or use CLI tools.\\n";`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `<?php\n\n$host = "${escapeSingleQuote(host)}";\n$port = ${port};\n\n$socket = @fsockopen($host, $port, $errno, $errstr, 5);\nif (!$socket) {\n    echo "Failed to connect: $errstr ($errno)\\n";\n    exit(1);\n}\n\necho "Connected\\n";\nfwrite($socket, "hello from client\\n");\n\n$response = fgets($socket, 1024);\necho "Received: " . $response;\n\nfclose($socket);\n?>\n`
+  }
+
+  return `<?php\n\n$host = "${escapeSingleQuote(host)}";\n$port = ${port};\n\n$socket = @socket_create(AF_INET, SOCK_DGRAM, 0);\nif (!$socket) {\n    echo "Failed to create socket\\n";\n    exit(1);\n}\n\n$message = "hello from client";\nsocket_sendto($socket, $message, strlen($message), 0, $host, $port);\necho "Sent\\n";\n\nsocket_set_option($socket, SOL_SOCKET, SO_RCVTIMEO, array("sec" => 3, "usec" => 0));\n$buf = "";\n$from = "";\n$port = 0;\n\nif (@socket_recvfrom($socket, $buf, 4096, 0, $from, $port) !== false) {\n    echo "Received: " . $buf . " from " . $from . "\\n";\n} else {\n    echo "No response (timeout)\\n";\n}\n\nsocket_close($socket);\n?>\n`
+}
+
+function buildSocketRuby(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `# Ruby WebSocket requires 'websocket' gem\n# Install: gem install websocket\n# Or add to Gemfile: gem 'websocket'\n\nrequire 'websocket'\n\nws = WebSocket::Client::Simple.connect('${escapeSingleQuote(url)}')\n\nws.on_open do\n  puts 'connected'\n  ws.send 'hello from client'\nend\n\nws.on_message do |msg|\n  puts 'received: ' + msg.data\nend\n\nws.on_error do |e|\n  puts 'error: ' + e.message\nend\n\nws.on_close do\n  puts 'disconnected'\nend\n\nsleep`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `require 'socket'\n\nhost = '${escapeSingleQuote(host)}'\nport = ${port}\n\nbegin\n  sock = TCPSocket.new(host, port)\n  puts 'connected'\n  sock.write("hello from client\\n")\n  \n  response = sock.gets\n  puts "received: #{response}"\n  \n  sock.close\nrescue => e\n  puts "Error: #{e.message}"\nend`
+  }
+
+  return `require 'socket'\n\nhost = '${escapeSingleQuote(host)}'\nport = ${port}\n\nbegin\n  sock = UDPSocket.new\n  sock.send("hello from client", 0, host, port)\n  puts 'sent'\n  \n  sock.setsockopt(Socket::SO_RCVTIMEO, 3000)\n  begin\n    msg, _ = sock.recvfrom(4096)\n    puts "received: #{msg}"\n  rescue TimeoutError\n    puts 'no response (timeout)'\n  end\n  \n  sock.close\nrescue => e\n  puts "Error: #{e.message}"\nend`
+}
+
+function buildSocketC(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `// C WebSocket: basic handshake via sockets, requires OpenSSL for wss://\n// For production, consider libwebsockets or websocket-client\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\nint main() {\n    // Note: C has no built-in WebSocket support.\n    // Use a library like libwebsockets, or implement handshake manually.\n    // For simple testing, consider using 'websocat' tool instead.\n    printf("WebSocket requires library support. Install libwebsockets.\\n");\n    return 0;\n}\n`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\nint main() {\n    int sock;\n    struct sockaddr_in server;\n    struct hostent *he;\n    char buffer[4096];\n\n    he = gethostbyname("${escapeDoubleQuote(host)}");\n    if (!he) { fprintf(stderr, "Cannot resolve host\\n"); return 1; }\n\n    sock = socket(AF_INET, SOCK_STREAM, 0);\n    if (sock < 0) { perror("socket"); return 1; }\n\n    server.sin_family = AF_INET;\n    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n    server.sin_port = htons(${port});\n\n    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {\n        perror("connect"); return 1;\n    }\n\n    printf("connected\\n");\n    send(sock, "hello from client\\n", 18, 0);\n\n    int n = recv(sock, buffer, sizeof(buffer) - 1, 0);\n    if (n > 0) { buffer[n] = '\\0'; printf("received: %s", buffer); }\n\n    close(sock);\n    return 0;\n}`
+  }
+
+  return `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\nint main() {\n    int sock;\n    struct sockaddr_in server;\n    struct hostent *he;\n    char buffer[4096];\n    socklen_t len = sizeof(server);\n\n    he = gethostbyname("${escapeDoubleQuote(host)}");\n    if (!he) { fprintf(stderr, "Cannot resolve host\\n"); return 1; }\n\n    sock = socket(AF_INET, SOCK_DGRAM, 0);\n    if (sock < 0) { perror("socket"); return 1; }\n\n    server.sin_family = AF_INET;\n    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n    server.sin_port = htons(${port});\n\n    const char *msg = "hello from client";\n    sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&server, sizeof(server));\n    printf("sent\\n");\n\n    struct timeval tv = {3, 0};\n    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));\n\n    int n = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&server, &len);\n    if (n > 0) { buffer[n] = '\\0'; printf("received: %s", buffer); }\n    else printf("no response (timeout)\\n");\n\n    close(sock);\n    return 0;\n}`
+}
+
+function buildSocketCpp(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `// C++ WebSocket: requires Boost.Beast or libwebsocket\n// Basic implementation using Boost.Beast:\n// #include <boost/beast/websocket.hpp>\n// For production, use a WebSocket library.\n// For simple testing, use 'websocat' tool instead.\n\n#include <iostream>\n\nint main() {\n    std::cout << "C++ WebSocket requires library support (e.g. Boost.Beast).\\n";\n    std::cout << "For simple testing: websocat ws://${escapeSingleQuote(url)}\\n";\n    return 0;\n}\n`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `#include <iostream>\n#include <string>\n#include <cstring>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\nint main() {\n    int sock = socket(AF_INET, SOCK_STREAM, 0);\n    if (sock < 0) { perror("socket"); return 1; }\n\n    struct hostent *he = gethostbyname("${escapeDoubleQuote(host)}");\n    if (!he) { std::cerr << "Cannot resolve host" << std::endl; return 1; }\n\n    struct sockaddr_in server;\n    memset(&server, 0, sizeof(server));\n    server.sin_family = AF_INET;\n    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n    server.sin_port = htons(${port});\n\n    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {\n        perror("connect"); return 1;\n    }\n\n    std::cout << "connected" << std::endl;\n    std::string msg = "hello from client\\n";\n    send(sock, msg.c_str(), msg.size(), 0);\n\n    char buffer[4096];\n    ssize_t n = recv(sock, buffer, sizeof(buffer) - 1, 0);\n    if (n > 0) { buffer[n] = '\\0'; std::cout << "received: " << buffer; }\n\n    close(sock);\n    return 0;\n}`
+  }
+
+  return `#include <iostream>\n#include <string>\n#include <cstring>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n#include <netdb.h>\n#include <unistd.h>\n\nint main() {\n    int sock = socket(AF_INET, SOCK_DGRAM, 0);\n    if (sock < 0) { perror("socket"); return 1; }\n\n    struct hostent *he = gethostbyname("${escapeDoubleQuote(host)}");\n    if (!he) { std::cerr << "Cannot resolve host" << std::endl; return 1; }\n\n    struct sockaddr_in server;\n    memset(&server, 0, sizeof(server));\n    server.sin_family = AF_INET;\n    memcpy(&server.sin_addr, he->h_addr, he->h_length);\n    server.sin_port = htons(${port});\n\n    std::string msg = "hello from client";\n    sendto(sock, msg.c_str(), msg.size(), 0, (struct sockaddr *)&server, sizeof(server));\n    std::cout << "sent" << std::endl;\n\n    struct timeval tv = {3, 0};\n    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));\n\n    char buffer[4096];\n    socklen_t len = sizeof(server);\n    ssize_t n = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&server, &len);\n    if (n > 0) { buffer[n] = '\\0'; std::cout << "received: " << buffer; }\n    else std::cout << "no response (timeout)" << std::endl;\n\n    close(sock);\n    return 0;\n}`
+}
+
+function buildSocketCSharp(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `using System;\nusing System.Net;\nusing System.Net.WebSockets;\nusing System.Text;\nusing System.Threading;\nusing System.Threading.Tasks;\n\nclass Program\n{\n    static async Task Main()\n    {\n        using var client = new HttpClient();\n        // Note: System.Net.WebSockets.ClientWebSocket requires HttpListener or custom handshake\n        Console.WriteLine("C# WebSocket requires ClientWebSocket with custom connection.");\n        Console.WriteLine("For simple testing: dotnet add package System.Net.WebSockets.ClientWebSocket");\n        \n        var uri = new Uri("${escapeDoubleQuote(url)}");\n        using var ws = new ClientWebSocket();\n        \n        await ws.ConnectAsync(uri, CancellationToken.None);\n        \n        var msg = Encoding.UTF8.GetBytes("hello from client");\n        await ws.SendAsync(new ArraySegment<byte>(msg), WebSocketMessageType.Text, true, CancellationToken.None);\n        \n        var buffer = new byte[4096];\n        var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);\n        var text = Encoding.UTF8.GetString(buffer, 0, result.Count);\n        Console.WriteLine($"received: {text}");\n        \n        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);\n    }\n}`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `using System;\nusing System.Net.Sockets;\n\nclass Program\n{\n    static void Main()\n    {\n        try\n        {\n            using var client = new TcpClient("${escapeDoubleQuote(host)}", ${port});\n            using var stream = client.GetStream();\n            using var reader = new StreamReader(stream);\n            using var writer = new StreamWriter(stream);\n\n            Console.WriteLine("connected");\n            writer.WriteLine("hello from client");\n            writer.Flush();\n\n            var response = reader.ReadLine();\n            Console.WriteLine($"received: {response}");\n        }\n        catch (Exception ex)\n        {\n            Console.WriteLine($"Error: {ex.Message}");\n        }\n    }\n}`
+  }
+
+  return `using System;\nusing System.Net;\nusing System.Net.Sockets;\n\nclass Program\n{\n    static void Main()\n    {\n        try\n        {\n            using var client = new UdpClient();\n            var host = IPAddress.Parse("${escapeDoubleQuote(host)}");\n            var endpoint = new IPEndPoint(host, ${port});\n\n            var msg = Encoding.UTF8.GetBytes("hello from client");\n            client.Send(msg, msg.Length, endpoint);\n            Console.WriteLine("sent");\n\n            client.Client.ReceiveTimeout = 3000;\n            try\n            {\n                var result = client.Receive(ref endpoint);\n                var text = Encoding.UTF8.GetString(result);\n                Console.WriteLine($"received: {text} from {endpoint}");\n            }\n            catch (SocketException)\n            {\n                Console.WriteLine("no response (timeout)");\n            }\n        }\n        catch (Exception ex)\n        {\n            Console.WriteLine($"Error: {ex.Message}");\n        }\n    }\n}`
+}
+
+function buildSocketKotlin(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `// Kotlin WebSocket requires OkHttp (included in build)
+import okhttp3.*
+import java.util.concurrent.TimeUnit
+
+fun main() {
+    val client = OkHttpClient.Builder()
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    val request = Request.Builder()
+        .url("${escapeDoubleQuote(url)}")
+        .build()
+
+    val ws = client.newWebSocket(request, object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            println("connected")
+            webSocket.send("hello from client")
+        }
+
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            println("received: " + text)
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            println("error: " + t.message)
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            println("disconnected")
+        }
+    })
+
+    Thread.sleep(5000)
+    ws.close(1000, "bye")
+}`
+  }
+
+  const { host: kotlinHost, port: kotlinPort } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `import java.net.Socket
+
+fun main() {
+    val host = "${escapeDoubleQuote(kotlinHost)}"
+    val port = ${kotlinPort}
+
+    try {
+        Socket(host, port).use { socket ->
+            println("connected")
+            val output = socket.getOutputStream()
+            output.write("hello from client\\n".toByteArray())
+            output.flush()
+
+            val input = socket.getInputStream()
+            val buffer = ByteArray(4096)
+            val n = input.read(buffer)
+            if (n > 0) {
+                println("received: " + String(buffer, 0, n))
+            }
+        }
+    } catch (e: Exception) {
+        println("Error: " + e.message)
+    }
+}`
+  }
+
+  return `import java.net.DatagramSocket
+import java.net.InetAddress
+
+fun main() {
+    val host = "${escapeDoubleQuote(kotlinHost)}"
+    val port = ${kotlinPort}
+
+    try {
+        DatagramSocket().use { socket ->
+            val message = "hello from client".toByteArray()
+            val address = InetAddress.getByName(host)
+            val packet = DatagramPacket(message, message.size, address, port)
+            socket.send(packet)
+            println("sent")
+
+            socket.soTimeout = 3000
+            val buffer = ByteArray(4096)
+            val response = DatagramPacket(buffer, buffer.size)
+            try {
+                socket.receive(response)
+                println("received: " + String(response.data, 0, response.length))
+            } catch (e: Exception) {
+                println("no response (timeout)")
+            }
+        }
+    } catch (e: Exception) {
+        println("Error: " + e.message)
+    }
+}`
+}
+
+function buildSocketRust(req: RequestState): string {
+  if (req.method === 'WS') {
+    const url = resolveWsUrl(req)
+    return `// Rust WebSocket requirestokio-tungstenite or websocket crate\n// Add to Cargo.toml:\n// tokio = { version = "1", features = ["full"] }\n// tokio-tungstenite = "0.21"\n// futures-util = "0.3"\n\nuse std::time::Duration;\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    let url = "${escapeSingleQuote(url)}";\n    let (ws, _) = tokio_tungstenite::connect_async(url).await?;\n    \n    println!("connected");\n    \n    ws.send(tokio_tungstenite::tungstenite::Message::Text("hello from client".to_string())).await?;\n    \n    if let Some(msg) = ws.next().await {\n        match msg {\n            Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {\n                println!("received: {}", text);\n            }\n            _ => {}\n        }\n    }\n    \n    Ok(())\n}\n\n// For std (non-async), use 'websocket' crate instead.\n// Or use websocat CLI tool: cargo install websocat`
+  }
+
+  const { host, port } = parseSocketHostPort(req.url)
+  if (req.method === 'TCP') {
+    return `use std::io::{Read, Write};\nuse std::net::TcpStream;\n\nfn main() {\n    let addr = format!("${escapeDoubleQuote(host)}:${port}");\n    match TcpStream::connect(&addr) {\n        Ok(mut stream) => {\n            println!("connected");\n            stream.write(b"hello from client\\n").unwrap();\n            stream.flush().unwrap();\n\n            let mut buffer = [0u8; 4096];\n            match stream.read(&mut buffer) {\n                Ok(n) => {\n                    let response = std::str::from_utf8(&buffer[..n]).unwrap_or("");\n                    println!("received: {}", response);\n                }\n                Err(e) => println!("Error reading: {}", e),\n            }\n        }\n        Err(e) => println!("Failed to connect: {}", e),\n    }\n}`
+  }
+
+  return `use std::net::UdpSocket;\nuse std::time::Duration;\n\nfn main() {\n    let host = "${escapeDoubleQuote(host)}";\n    let port = ${port};\n    let addr = format!("{}:{}", host, port);\n\n    match UdpSocket::bind("0.0.0.0:0") {\n        Ok(socket) => {\n            socket.set_read_timeout(Some(Duration::from_secs(3))).ok();\n\n            socket.send_to(b"hello from client", &addr).unwrap();\n            println!("sent");\n\n            let mut buf = [0u8; 4096];\n            match socket.recv_from(&mut buf) {\n                Ok((n, _)) => {\n                    let response = std::str::from_utf8(&buf[..n]).unwrap_or("");\n                    println!("received: {}", response);\n                }\n                Err(e) => println!("no response (timeout): {}", e),\n            }\n        }\n        Err(e) => println!("Error: {}", e),\n    }\n}`
+}
+
 function buildSocketCurlLike(req: RequestState): string {
   if (req.method === 'WS') {
     const url = resolveWsUrl(req)
@@ -685,6 +1361,24 @@ function buildSocketByLanguage(req: RequestState, language: CodeLanguage): strin
   switch (language) {
     case 'curl':
       return buildSocketCurlLike(req)
+    case 'wget':
+      return buildSocketCurlLike(req)
+    case 'powershell':
+      return buildSocketPowerShell(req)
+    case 'php':
+      return buildSocketPhp(req)
+    case 'ruby':
+      return buildSocketRuby(req)
+    case 'c':
+      return buildSocketC(req)
+    case 'cpp':
+      return buildSocketCpp(req)
+    case 'csharp':
+      return buildSocketCSharp(req)
+    case 'kotlin':
+      return buildSocketKotlin(req)
+    case 'rust':
+      return buildSocketRust(req)
     case 'javascript':
     case 'javascriptAxios':
       if (req.method === 'WS') return buildWsJavaScript(req)
@@ -705,6 +1399,15 @@ function buildSocketByLanguage(req: RequestState, language: CodeLanguage): strin
 
 export type CodeLanguage =
   | 'curl'
+  | 'wget'
+  | 'powershell'
+  | 'php'
+  | 'ruby'
+  | 'c'
+  | 'cpp'
+  | 'csharp'
+  | 'kotlin'
+  | 'rust'
   | 'javascript'
   | 'javascriptAxios'
   | 'typescriptFetch'
@@ -724,6 +1427,24 @@ export function generateCode(req: RequestState, language: CodeLanguage): string 
   switch (language) {
     case 'curl':
       return buildCurl(req)
+    case 'wget':
+      return buildWget(req)
+    case 'powershell':
+      return buildPowerShell(req)
+    case 'php':
+      return buildPhp(req)
+    case 'ruby':
+      return buildRuby(req)
+    case 'c':
+      return buildC(req)
+    case 'cpp':
+      return buildCpp(req)
+    case 'csharp':
+      return buildCSharp(req)
+    case 'kotlin':
+      return buildKotlin(req)
+    case 'rust':
+      return buildRust(req)
     case 'javascript':
       return buildFetch(req)
     case 'javascriptAxios':

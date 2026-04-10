@@ -8,6 +8,7 @@
     ]"
     :tabindex="disabled ? -1 : 0"
     role="button"
+    :aria-disabled="disabled ? 'true' : 'false'"
     @click="!disabled && $emit('click', $event)"
     @keydown.enter="!disabled && $emit('click', $event)"
     @keydown.space.prevent="!disabled && $emit('click', $event)"

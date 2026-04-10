@@ -13,10 +13,13 @@
       :readonly="props.readonly"
       :placeholder="props.placeholder"
       @input="onInput"
-      @focus="isFocused = true"
-      @blur="isFocused = false"
+      @focus="onFocus"
+      @blur="onBlur"
       @scroll="onScroll"
       @keydown="$emit('keydown', $event)"
+      @keyup="$emit('keyup', $event)"
+      @mouseup="$emit('mouseup', $event)"
+      @select="$emit('select', $event)"
     />
     <div class="ui-variable-input__overlay" aria-hidden="true">
       <div class="ui-variable-input__overlay-content" :style="overlayStyle">
@@ -60,6 +63,11 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   keydown: [event: KeyboardEvent]
+  keyup: [event: KeyboardEvent]
+  mouseup: [event: MouseEvent]
+  select: [event: Event]
+  blur: [event: FocusEvent]
+  focus: [event: FocusEvent]
 }>()
 
 const envStore = useEnvironmentStore()
@@ -136,7 +144,17 @@ function onWrapperMouseDown(event: MouseEvent) {
   inputRef.value?.focus()
 }
 
-defineExpose({ focus })
+function onFocus(e: FocusEvent) {
+  isFocused.value = true
+  emit('focus', e)
+}
+
+function onBlur(e: FocusEvent) {
+  isFocused.value = false
+  emit('blur', e)
+}
+
+defineExpose({ focus, inputRef })
 </script>
 
 <style scoped>

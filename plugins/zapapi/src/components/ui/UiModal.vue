@@ -1,10 +1,17 @@
 <template>
   <Teleport to="body">
     <div class="ui-modal-overlay" @click.self="onOverlayClick">
-      <div class="ui-modal" :class="[`ui-modal--${props.size}`]" role="dialog" aria-modal="true">
+      <div
+        ref="modalRef"
+        class="ui-modal"
+        :class="[`ui-modal--${props.size}`]"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+      >
         <div class="ui-modal__header">
-          <h3 class="ui-modal__title">{{ props.title }}</h3>
-          <UiButton variant="ghost" size="sm" icon-only @click="$emit('close')">
+          <h3 :id="titleId" class="ui-modal__title">{{ props.title }}</h3>
+          <UiButton ref="closeButtonRef" variant="ghost" size="sm" icon-only @click="$emit('close')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -22,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import UiButton from './UiButton.vue'
 
 const props = withDefaults(defineProps<{
@@ -36,6 +44,89 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   close: []
 }>()
+
+const modalRef = ref<HTMLElement | null>(null)
+const closeButtonRef = ref<{ $el?: HTMLElement } | null>(null)
+const titleId = `ui-modal-title-${Math.random().toString(36).slice(2, 10)}`
+let previousFocusedElement: HTMLElement | null = null
+
+function getFocusableElements(): HTMLElement[] {
+  const root = modalRef.value
+  if (!root) {
+    return []
+  }
+
+  const selectors = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ]
+
+  return Array.from(root.querySelectorAll<HTMLElement>(selectors.join(','))).filter((el) => {
+    return !el.hasAttribute('disabled') && el.tabIndex !== -1
+  })
+}
+
+function focusInitialElement() {
+  const closeEl = closeButtonRef.value?.$el
+  if (closeEl) {
+    closeEl.focus()
+    return
+  }
+
+  const focusables = getFocusableElements()
+  focusables[0]?.focus()
+}
+
+function onWindowKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+
+  if (event.key !== 'Tab') {
+    return
+  }
+
+  const focusables = getFocusableElements()
+  if (focusables.length === 0) {
+    event.preventDefault()
+    return
+  }
+
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement as HTMLElement | null
+
+  if (event.shiftKey) {
+    if (!active || active === first || !modalRef.value?.contains(active)) {
+      event.preventDefault()
+      last.focus()
+    }
+    return
+  }
+
+  if (!active || active === last || !modalRef.value?.contains(active)) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+onMounted(async () => {
+  previousFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  await nextTick()
+  focusInitialElement()
+  window.addEventListener('keydown', onWindowKeydown, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onWindowKeydown, true)
+  previousFocusedElement?.focus()
+})
 
 function onOverlayClick() {
   if (props.closeOnOverlay) emit('close')

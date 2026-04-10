@@ -1,10 +1,16 @@
 <template>
   <Teleport to="body">
     <div class="settings-overlay" @click.self="$emit('close')">
-      <div class="settings-modal" role="dialog" aria-modal="true">
+      <div
+        ref="modalRef"
+        class="settings-modal"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+      >
         <div class="settings-header">
-          <h3 class="settings-title">{{ t('settings.title') }}</h3>
-          <button class="settings-close" @click="$emit('close')">
+          <h3 :id="titleId" class="settings-title">{{ t('settings.title') }}</h3>
+          <button ref="closeButtonRef" type="button" class="settings-close" @click="$emit('close')">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -92,6 +98,20 @@
               <span class="settings-toggle__label">{{ t('settings.shortcutsEnabled') }}</span>
               <input id="shortcuts-enabled" v-model="shortcutsEnabled" type="checkbox" />
             </label>
+            <label class="settings-toggle" for="cookies-enabled">
+              <span class="settings-toggle__label">{{ t('settings.cookiesEnabled') }}</span>
+              <input id="cookies-enabled" v-model="cookiesEnabled" type="checkbox" />
+            </label>
+            <label class="settings-toggle" for="persist-session-cookies">
+              <span class="settings-toggle__label">{{ t('settings.persistSessionCookies') }}</span>
+              <input id="persist-session-cookies" v-model="persistSessionCookies" type="checkbox" :disabled="!cookiesEnabled" />
+            </label>
+            <div class="settings-actions">
+              <button class="settings-action" type="button" @click="clearCookies">
+                <span class="settings-action__label">{{ t('settings.clearCookies') }}</span>
+                <span class="settings-action__hint">{{ t('settings.clearCookiesHint') }}</span>
+              </button>
+            </div>
           </div>
 
           <!-- About Section -->
@@ -155,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '../store/settings'
 import { setLocale, getLocale } from '../i18n'
@@ -189,11 +209,109 @@ const shortcutsEnabled = computed({
   set: (enabled: boolean) => settings.setShortcutsEnabled(enabled)
 })
 
+const cookiesEnabled = computed({
+  get: () => settings.isCookiesEnabled(),
+  set: (enabled: boolean) => settings.setCookiesEnabled(enabled)
+})
+
+const persistSessionCookies = computed({
+  get: () => settings.shouldPersistSessionCookies(),
+  set: (enabled: boolean) => settings.setPersistSessionCookies(enabled)
+})
+
+function clearCookies() {
+  if (window.services?.cookiesClear) {
+    window.services.cookiesClear()
+  }
+}
+
 const emit = defineEmits<{
   close: []
   'open-shortcuts': []
   'replay-onboarding': []
 }>()
+
+const modalRef = ref<HTMLElement | null>(null)
+const closeButtonRef = ref<HTMLButtonElement | null>(null)
+const titleId = `settings-modal-title-${Math.random().toString(36).slice(2, 10)}`
+let previousFocusedElement: HTMLElement | null = null
+
+function getFocusableElements(): HTMLElement[] {
+  const root = modalRef.value
+  if (!root) {
+    return []
+  }
+
+  const selectors = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ]
+
+  return Array.from(root.querySelectorAll<HTMLElement>(selectors.join(','))).filter((el) => {
+    return !el.hasAttribute('disabled') && el.tabIndex !== -1
+  })
+}
+
+function focusInitialElement() {
+  if (closeButtonRef.value) {
+    closeButtonRef.value.focus()
+    return
+  }
+
+  const focusables = getFocusableElements()
+  focusables[0]?.focus()
+}
+
+function onWindowKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+
+  if (event.key !== 'Tab') {
+    return
+  }
+
+  const focusables = getFocusableElements()
+  if (focusables.length === 0) {
+    event.preventDefault()
+    return
+  }
+
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement as HTMLElement | null
+
+  if (event.shiftKey) {
+    if (!active || active === first || !modalRef.value?.contains(active)) {
+      event.preventDefault()
+      last.focus()
+    }
+    return
+  }
+
+  if (!active || active === last || !modalRef.value?.contains(active)) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+onMounted(async () => {
+  previousFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  await nextTick()
+  focusInitialElement()
+  window.addEventListener('keydown', onWindowKeydown, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onWindowKeydown, true)
+  previousFocusedElement?.focus()
+})
 </script>
 
 <style scoped>

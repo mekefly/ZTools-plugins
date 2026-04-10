@@ -23,12 +23,14 @@ export default {
     noEnv: '无环境',
     manageEnv: '管理环境',
     code: '代码',
+    cookies: 'Cookies',
     collections: '集合',
     newRequest: '新请求',
     saved: '已保存',
     envManagerTitle: '环境管理',
     codeGeneratorTitle: '生成代码',
-    collectionManagerTitle: '集合管理'
+    collectionManagerTitle: '集合管理',
+    cookieManagerTitle: 'Cookie 管理'
   },
 
   sidebar: {
@@ -49,7 +51,7 @@ export default {
   },
 
   request: {
-    urlPlaceholder: '输入请求 URL，支持 {var}',
+    urlPlaceholder: "输入请求 URL，支持 {'{{'}变量{'}}'}",
     send: '发送',
     sending: '发送中',
     saveRequest: '保存请求',
@@ -66,6 +68,12 @@ export default {
     addParam: '添加参数',
     addHeader: '添加 Header',
     authType: '认证类型',
+    urlMenu: {
+      setVar: '设置为变量',
+      newTab: '在新标签页中打开请求',
+      encode: '编码 URL 组件',
+      decode: '解码 URL 组件'
+    },
     none: '无认证',
     bearer: 'Bearer Token',
     basic: 'Basic Auth',
@@ -137,6 +145,14 @@ export default {
     digestUsername: 'Digest 用户名',
     digestPassword: 'Digest 密码',
     digestAlgorithm: 'Digest 算法',
+    cookiePolicy: 'Cookie 策略',
+    cookieHint: 'Cookie Jar 遵循 Postman 风格行为。手动设置的 Cookie Header 会在当前请求中优先。',
+    cookiePolicyInherit: '继承全局设置',
+    cookiePolicyEnable: '总是启用 Cookie Jar',
+    cookiePolicyDisable: '对此请求禁用',
+    cookiePolicyInheritDesc: '使用设置面板中的全局 Cookie 配置。',
+    cookiePolicyEnableDesc: '强制为当前请求启用 Cookie Jar。',
+    cookiePolicyDisableDesc: '当前请求不发送也不存储 Cookie。',
     noBody: '此请求未使用请求体',
     invalidHttpUrl: '请求 URL 无效，请输入有效地址或主机名',
     invalidHttpProtocol: '仅支持 HTTP/HTTPS 协议',
@@ -207,7 +223,6 @@ export default {
     timeLabel: '时间',
     sizeLabel: '大小',
     searchPlaceholder: '搜索 JSON 字段/值/路径',
-    download: '下载响应',
     copyField: '复制字段',
     copyKey: '复制键名',
     copyPath: '复制路径',
@@ -232,7 +247,8 @@ export default {
     search: '搜索',
     filterPlaceholder: '过滤',
     copy: '复制',
-    noCookies: '暂无 Cookies'
+    noCookies: '暂无 Cookies',
+    addCookiesToJar: '添加到 Cookie Jar'
   },
 
   env: {
@@ -257,6 +273,15 @@ export default {
 
   code: {
     curl: 'cURL',
+    wget: 'wget',
+    powershell: 'PowerShell',
+    php: 'PHP',
+    ruby: 'Ruby',
+    c: 'C (libcurl)',
+    cpp: 'C++ (libcurl)',
+    csharp: 'C#',
+    kotlin: 'Kotlin',
+    rust: 'Rust',
     javascript: 'JavaScript',
     javascriptWs: 'JavaScript (WebSocket)',
     javascriptNode: 'JavaScript (Node)',
@@ -284,6 +309,10 @@ export default {
     theme: '主题模式',
     language: '语言',
     accessibility: '引导与快捷键',
+    cookiesEnabled: '启用 Cookie Jar',
+    persistSessionCookies: '持久化会话 Cookie',
+    clearCookies: '清空全部 Cookie',
+    clearCookiesHint: '删除本地 Jar 中所有持久化 Cookie',
     openShortcuts: '查看快捷键',
     replayOnboarding: '重新播放新手引导',
     shortcutsEnabled: '启用全局快捷键',
@@ -298,6 +327,18 @@ export default {
     langZhCN: '简体中文',
     langZhTW: '繁體中文',
     langEn: 'English'
+  },
+
+  cookies: {
+    searchPlaceholder: '按域名/名称/值/路径搜索 Cookie',
+    refresh: '刷新',
+    clearAll: '清空全部',
+    clearAllConfirm: '将从本地 Jar 删除所有 Cookie，是否继续？',
+    clearDomain: '清空该域名',
+    empty: 'Cookie Jar 为空',
+    session: '会话',
+    copy: '复制',
+    copied: '已复制!'
   },
 
   shortcuts: {
@@ -379,6 +420,22 @@ export default {
       shortcuts: {
         title: '快捷键入口',
         desc: '点击这里随时查看完整快捷键清单。输入 ? 也可以快速打开。'
+      },
+      code: {
+        title: '代码生成器',
+        desc: '无论配置了多复杂的请求头和请求体，一键即可生成 cURL、Node.js、Python、Go 等多语言代码。'
+      },
+      method: {
+        title: '请求方法与 Socket',
+        desc: '在这里选择常见的 HTTP 请求方法。同时这里也支持原生的 WS、TCP、UDP Socket 调试！'
+      },
+      config: {
+        title: '请求配置区',
+        desc: '通过清晰的表单在此配置 URL 参数、Headers、Auth 鉴权机制以及结构化的请求体。'
+      },
+      settings: {
+        title: '系统设置',
+        desc: '点击进入系统设置，管理主题模式、快捷键开关及全局 Cookie 策略等偏好。'
       }
     }
   },
@@ -406,7 +463,9 @@ export default {
     deleteCollection: '确定要删除这个集合吗？',
     deleteCollectionMsg: '此操作不可撤销，集合内的所有请求也将被删除。',
     deleteRequest: '确定要删除这个请求吗？',
-    deleteRequestMsg: '此操作不可撤销。'
+    deleteRequestMsg: '此操作不可撤销。',
+    clearHistory: '确定要清空历史记录吗？',
+    clearHistoryMsg: '此操作不可撤销，所有历史记录将被永久删除。'
   },
 
   history: {

@@ -6,6 +6,8 @@ interface SettingsState {
   theme: ThemeMode
   onboardingSeen: boolean
   shortcutsEnabled: boolean
+  cookiesEnabled: boolean
+  persistSessionCookies: boolean
 }
 
 const STORAGE_KEY = 'zapapi-settings'
@@ -22,7 +24,9 @@ function loadSettings(): SettingsState {
       return {
         theme: isThemeMode(parsed.theme) ? parsed.theme : 'system',
         onboardingSeen: Boolean(parsed.onboardingSeen),
-        shortcutsEnabled: parsed.shortcutsEnabled !== false
+        shortcutsEnabled: parsed.shortcutsEnabled !== false,
+        cookiesEnabled: parsed.cookiesEnabled !== false,
+        persistSessionCookies: parsed.persistSessionCookies === true
       }
     }
   } catch {}
@@ -30,7 +34,9 @@ function loadSettings(): SettingsState {
   return {
     theme: 'system',
     onboardingSeen: false,
-    shortcutsEnabled: true
+    shortcutsEnabled: true,
+    cookiesEnabled: true,
+    persistSessionCookies: false
   }
 }
 
@@ -107,6 +113,24 @@ export function useSettingsStore() {
     saveSettings(state.value)
   }
 
+  function isCookiesEnabled(): boolean {
+    return state.value.cookiesEnabled
+  }
+
+  function setCookiesEnabled(enabled: boolean): void {
+    state.value.cookiesEnabled = enabled
+    saveSettings(state.value)
+  }
+
+  function shouldPersistSessionCookies(): boolean {
+    return state.value.persistSessionCookies
+  }
+
+  function setPersistSessionCookies(enabled: boolean): void {
+    state.value.persistSessionCookies = enabled
+    saveSettings(state.value)
+  }
+
   return {
     state,
     setTheme,
@@ -115,6 +139,10 @@ export function useSettingsStore() {
     hasSeenOnboarding,
     setOnboardingSeen,
     isShortcutsEnabled,
-    setShortcutsEnabled
+    setShortcutsEnabled,
+    isCookiesEnabled,
+    setCookiesEnabled,
+    shouldPersistSessionCookies,
+    setPersistSessionCookies
   }
 }

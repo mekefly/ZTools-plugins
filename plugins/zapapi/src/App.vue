@@ -3,103 +3,71 @@
     <div class="zapapi-header">
       <div class="zapapi-logo">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <span>ZapApi</span>
       </div>
-      <div class="zapapi-env-selector" data-tour-id="env-selector">
-        <span class="zapapi-env-label">{{ t('app.env') }}</span>
-        <UiSelect
-          v-model="activeEnvId"
-          :options="envOptions"
-          :placeholder="t('app.noEnv')"
-        />
-        <UiTooltip :content="t('app.manageEnv')" placement="bottom">
-          <UiButton variant="ghost" size="sm" icon-only @click="showEnvManager = true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
-          </UiButton>
-        </UiTooltip>
-      </div>
       <div class="zapapi-actions">
-        <UiButton variant="secondary" size="sm" :disabled="!activeTab || !activeTab.request.url" @click="showCodeGenerator = true">
+        <UiButton data-tour-id="code-generator" variant="secondary" size="sm" :disabled="!activeTab || !activeTab.request.url"
+          @click="showCodeGenerator = true">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
           </svg>
           {{ t('app.code') }}
         </UiButton>
-        <UiTooltip :content="t('shortcuts.title')" placement="bottom">
-          <UiButton data-tour-id="shortcuts-entry" variant="ghost" size="sm" icon-only @click="showShortcuts = true">
-            ?
-          </UiButton>
-        </UiTooltip>
-        <UiTooltip :content="t('common.settings')" placement="bottom">
-          <UiButton data-tour-id="settings-entry" variant="ghost" size="sm" icon-only @click="showSettings = true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </UiButton>
-        </UiTooltip>
       </div>
     </div>
     <div class="zapapi-body">
-      <Sidebar
-        :active-collection="activeCollectionId"
-        :active-request="activeRequestId"
-        :collapsed="sidebarCollapsed"
-        @select-request="onSelectRequest"
-        @open-request-in-new-tab="onOpenRequestInNewTab"
-        @new-request="onNewRequest"
-        @new-collection="onNewCollection"
-        @toggle="sidebarCollapsed = !sidebarCollapsed"
-        @manage-collections="showCollectionManager = true"
-        @load-history="onLoadHistory"
-      />
+      <ActivityBar :active-panel="activePanel" :collapsed="sidePanelCollapsed" :active-env-name="activeEnvName"
+        @select-panel="onSelectPanel" @open-settings="showSettings = true" @open-shortcuts="showShortcuts = true" />
+      <SidePanel :active-panel="activePanel" :collapsed="sidePanelCollapsed">
+        <template #header-actions>
+          <UiButton v-if="activePanel === 'collections'" variant="ghost" size="sm" icon-only @click="onNewCollection">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </UiButton>
+          <UiButton v-if="activePanel === 'environments'" variant="ghost" size="sm" icon-only
+            @click="envPanelRef?.createNewEnv()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </UiButton>
+        </template>
+        <CollectionsPanel v-if="activePanel === 'collections'" :active-collection="activeCollectionId"
+          :active-request="activeRequestId" @select-request="onSelectRequest"
+          @open-request-in-new-tab="onOpenRequestInNewTab" @new-request="onNewRequest"
+          @new-collection="onNewCollection" />
+        <HistoryPanel v-if="activePanel === 'history'" @load-history="onLoadHistory" />
+        <EnvironmentPanel v-if="activePanel === 'environments'" ref="envPanelRef" />
+        <CookiePanel v-if="activePanel === 'cookies'" ref="cookiePanelRef" />
+      </SidePanel>
       <div class="zapapi-main">
-        <RequestTabs
-          data-tour-id="tabs-root"
-          :tabs="tabItems"
-          :active-tab-id="activeTabId"
-          @select="switchTab"
-          @close="closeTab"
-          @close-others="closeOtherTabs"
-          @close-right="closeRightTabs"
-          @duplicate="duplicateTab"
-          @new="newTab"
-          @rename="renameTab"
-        />
+        <RequestTabs data-tour-id="tabs-root" :tabs="tabItems" :active-tab-id="activeTabId" @select="switchTab"
+          @close="closeTab" @close-others="closeOtherTabs" @close-right="closeRightTabs" @duplicate="duplicateTab"
+          @new="newTab" @rename="renameTab" />
         <div class="workspace-region">
-          <RequestBuilder
-            ref="requestBuilderRef"
-            :request="activeTab.request"
-            :response="activeTab.response"
-            :sending="activeTab.sending"
-            :has-response="showResponsePanel"
-            :response-collapsed="responseCollapsed"
-            @send="onSend"
-            @connect="onConnectSocket"
-            @disconnect="onDisconnectSocket"
-            @socket-send="onSocketSend"
-            @save="onSave"
-            @cancel="onCancelSend"
-          />
-          <div v-if="showResponsePanel" class="response-region" :class="{ 'response-region--collapsed': responseCollapsed }">
+          <RequestBuilder ref="requestBuilderRef" :request="activeTab.request" :response="activeTab.response"
+            :sending="activeTab.sending" :has-response="showResponsePanel" :response-collapsed="responseCollapsed"
+            :sidebar-collapsed="sidePanelCollapsed" @send="onSend" @connect="onConnectSocket"
+            @disconnect="onDisconnectSocket" @socket-send="onSocketSend" @save="onSave" @cancel="onCancelSend"
+            @new-tab-with-url="openUrlInNewTab" />
+          <div v-if="showResponsePanel" class="response-region"
+            :class="{ 'response-region--collapsed': responseCollapsed }">
             <div class="response-region__expanded">
-              <ResponseViewer
-                :response="activeTab.response"
-                :sending="activeTab.sending"
-                @toggle-collapse="responseCollapsed = true"
-              />
+              <ResponseViewer :response="activeTab.response" :sending="activeTab.sending"
+                @toggle-collapse="responseCollapsed = true" />
             </div>
             <div class="response-toggle-bar">
               <div class="response-toggle-bar__spacer"></div>
               <UiButton variant="ghost" size="xs" @click="responseCollapsed = !responseCollapsed">
-                <svg class="response-toggle-icon" :class="{ 'response-toggle-icon--collapsed': responseCollapsed }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-                  <polyline points="6 9 12 15 18 9"/>
+                <svg class="response-toggle-icon" :class="{ 'response-toggle-icon--collapsed': responseCollapsed }"
+                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                  <polyline points="6 9 12 15 18 9" />
                 </svg>
-                {{ responseCollapsed ? t('response.expand') : t('response.collapse') }}
               </UiButton>
             </div>
           </div>
@@ -107,31 +75,14 @@
       </div>
     </div>
 
-    <UiModal v-if="showEnvManager" :title="t('app.envManagerTitle')" size="lg" @close="showEnvManager = false">
-      <EnvironmentManager />
-    </UiModal>
     <UiModal v-if="showCodeGenerator" :title="t('app.codeGeneratorTitle')" size="md" @close="showCodeGenerator = false">
       <CodeGenerator :request="activeTab.request" />
     </UiModal>
-    <UiModal v-if="showCollectionManager" :title="t('app.collectionManagerTitle')" size="md" @close="showCollectionManager = false">
-      <CollectionManager />
-    </UiModal>
-    <UiConfirm
-      v-if="pendingTabClose"
-      :title="t('tabs.unsavedTitle')"
-      :message="pendingTabClose.message"
-      :confirm-text="t('tabs.closeAnyway')"
-      :cancel-text="t('common.cancel')"
-      confirm-variant="danger"
-      @confirm="confirmPendingTabClose"
-      @cancel="pendingTabClose = null"
-    />
-    <SettingsModal
-      v-if="showSettings"
-      @close="showSettings = false"
-      @open-shortcuts="showShortcuts = true"
-      @replay-onboarding="replayOnboarding"
-    />
+    <UiConfirm v-if="pendingTabClose" :title="t('tabs.unsavedTitle')" :message="pendingTabClose.message"
+      :confirm-text="t('tabs.closeAnyway')" :cancel-text="t('common.cancel')" confirm-variant="danger"
+      @confirm="confirmPendingTabClose" @cancel="pendingTabClose = null" />
+    <SettingsModal v-if="showSettings" @close="showSettings = false" @open-shortcuts="showShortcuts = true"
+      @replay-onboarding="replayOnboarding" />
     <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
     <UiToast ref="toastRef" />
   </div>
@@ -140,20 +91,22 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Sidebar from './components/Sidebar.vue'
+import ActivityBar from './components/ActivityBar.vue'
+import type { PanelId } from './components/ActivityBar.vue'
+import SidePanel from './components/SidePanel.vue'
+import CollectionsPanel from './components/panels/CollectionsPanel.vue'
+import HistoryPanel from './components/panels/HistoryPanel.vue'
+import EnvironmentPanel from './components/panels/EnvironmentPanel.vue'
+import CookiePanel from './components/panels/CookiePanel.vue'
 import RequestBuilder from './components/RequestBuilder.vue'
 import ResponseViewer from './components/ResponseViewer.vue'
 import RequestTabs from './components/RequestTabs.vue'
-import EnvironmentManager from './components/EnvironmentManager.vue'
 import CodeGenerator from './components/CodeGenerator.vue'
-import CollectionManager from './components/CollectionManager.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import ShortcutsModal from './components/ShortcutsModal.vue'
-import UiSelect from './components/ui/UiSelect.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiModal from './components/ui/UiModal.vue'
 import UiToast from './components/ui/UiToast.vue'
-import UiTooltip from './components/ui/UiTooltip.vue'
 import UiConfirm from './components/ui/UiConfirm.vue'
 import type { RequestState, ResponseState } from './store/request'
 import { useEnvironmentStore } from './store/environments'
@@ -175,12 +128,42 @@ const settingsStore = useSettingsStore()
 const toastRef = ref<InstanceType<typeof UiToast> | null>(null)
 const requestBuilderRef = ref<{ focusRequestUrlInput: () => void } | null>(null)
 
-const showEnvManager = ref(false)
 const showCodeGenerator = ref(false)
-const showCollectionManager = ref(false)
 const showSettings = ref(false)
 const showShortcuts = ref(false)
-const sidebarCollapsed = ref(false)
+
+const activePanel = ref<PanelId | null>(null)
+const lastActivePanel = ref<PanelId>('collections')
+const envPanelRef = ref<InstanceType<typeof EnvironmentPanel> | null>(null)
+const cookiePanelRef = ref<InstanceType<typeof CookiePanel> | null>(null)
+
+const sidePanelCollapsed = computed(() => activePanel.value === null)
+
+const activeEnvName = computed(() => {
+  const envId = envStore.state.activeEnvId
+  if (!envId) return null
+  const env = envStore.state.environments.find((e) => e.id === envId)
+  return env?.name || null
+})
+
+function onSelectPanel(panel: PanelId) {
+  if (activePanel.value === panel) {
+    lastActivePanel.value = panel
+    activePanel.value = null
+  } else {
+    activePanel.value = panel
+    lastActivePanel.value = panel
+  }
+}
+
+function toggleSidePanel() {
+  if (activePanel.value !== null) {
+    lastActivePanel.value = activePanel.value
+    activePanel.value = null
+  } else {
+    activePanel.value = lastActivePanel.value || 'collections'
+  }
+}
 const pendingTabClose = ref<PendingTabCloseState | null>(null)
 
 interface RequestTabState {
@@ -233,6 +216,9 @@ const DEFAULT_REQUEST: RequestState = {
     formData: [],
     binary: {}
   },
+  cookiePolicy: {
+    mode: 'inherit'
+  },
   socket: {
     status: 'disconnected',
     messages: [],
@@ -246,6 +232,7 @@ const DEFAULT_RESPONSE: ResponseState = {
   time: null,
   size: null,
   headers: {},
+  headersRaw: [],
   body: '',
   raw: '',
   error: null,
@@ -297,14 +284,7 @@ const activeTab = computed(() => {
 const activeCollectionId = computed(() => activeTab.value?.collectionId || null)
 const activeRequestId = computed(() => activeTab.value?.requestId || null)
 
-const envOptions = computed(() => {
-  return envStore.state.environments.map((e) => ({ label: e.name, value: e.id }))
-})
 
-const activeEnvId = computed({
-  get: () => envStore.state.activeEnvId,
-  set: (val: string | null) => envStore.setActiveEnv(val)
-})
 
 const hasResponse = computed(() => {
   return (
@@ -451,6 +431,7 @@ function onNewRequest(collectionId: string) {
       digestAlgorithm: 'MD5'
     },
     body: { type: 'none', kind: 'none', contentType: '', raw: '', formData: [], binary: {} },
+    cookiePolicy: { mode: 'inherit' },
     socket: { status: 'disconnected', messages: [], messageType: 'Text' }
   })
   loadIntoActiveTab(newReq as any, collectionId, newReq.id)
@@ -470,6 +451,7 @@ function onLoadHistory(item: HistoryItem) {
       headers: item.headers,
       auth: item.auth,
       body: item.body,
+      cookiePolicy: item.cookiePolicy || { mode: 'inherit' },
       socket: { status: 'disconnected', messages: [], messageType: 'Text' }
     } as any,
     null,
@@ -479,6 +461,13 @@ function onLoadHistory(item: HistoryItem) {
 
 function newTab() {
   const tab = createEmptyTab()
+  tabs.value.push(tab)
+  activeTabId.value = tab.id
+}
+
+function openUrlInNewTab(url: string) {
+  const tab = createEmptyTab()
+  tab.request.url = url
   tabs.value.push(tab)
   activeTabId.value = tab.id
 }
@@ -641,9 +630,7 @@ function confirmPendingTabClose() {
 
 function isAnyModalOpen(): boolean {
   return (
-    showEnvManager.value ||
     showCodeGenerator.value ||
-    showCollectionManager.value ||
     showSettings.value ||
     showShortcuts.value ||
     pendingTabClose.value !== null
@@ -692,12 +679,23 @@ const onboarding = useOnboarding({
   hasSeen: () => settingsStore.hasSeenOnboarding(),
   markSeen: () => settingsStore.setOnboardingSeen(true),
   prepareUi: () => {
-    showEnvManager.value = false
     showCodeGenerator.value = false
-    showCollectionManager.value = false
     showSettings.value = false
     showShortcuts.value = false
-    sidebarCollapsed.value = false
+    activePanel.value = 'collections'
+    if (!hasResponse.value && activeTab.value) {
+      activeTab.value.request.url = 'https://api.example.com/demo'
+      activeTab.value.response = {
+        ...createEmptyResponse(),
+        status: 200,
+        statusText: 'OK',
+        time: 42,
+        size: 1024,
+        contentType: 'application/json',
+        body: '{\n  "message": "Welcome to ZapApi!"\n}',
+        raw: 'HTTP/1.1 200 OK\nContent-Type: application/json\n\n{\n  "message": "Welcome to ZapApi!"\n}'
+      }
+    }
   }
 })
 
@@ -724,9 +722,7 @@ const shortcuts = useShortcuts(
       }
     },
     cancelSend: onCancelSend,
-    toggleSidebar: () => {
-      sidebarCollapsed.value = !sidebarCollapsed.value
-    },
+    toggleSidebar: toggleSidePanel,
     focusRequestUrl: focusRequestUrlInputShortcut,
     toggleResponsePanel: toggleResponsePanelShortcut
   },
@@ -770,7 +766,8 @@ async function onSend() {
     params: snapshot.params,
     headers: snapshot.headers,
     auth: snapshot.auth,
-    body: snapshot.body
+    body: snapshot.body,
+    cookiePolicy: snapshot.cookiePolicy
   })
 
   try {
@@ -785,6 +782,7 @@ async function onSend() {
       time: result.time,
       size: result.size,
       headers: result.headers,
+      headersRaw: result.headersRaw,
       body: result.body,
       raw: result.raw,
       error: result.error,
@@ -883,6 +881,7 @@ function onSave() {
     headers: cloneData(activeTab.value.request.headers),
     auth: cloneData(activeTab.value.request.auth),
     body: cloneData(activeTab.value.request.body),
+    cookiePolicy: cloneData(activeTab.value.request.cookiePolicy),
     socket: cloneData(activeTab.value.request.socket)
   })
 
@@ -923,22 +922,10 @@ function onSave() {
   color: var(--text-primary);
 }
 
-.zapapi-env-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-left: auto;
-}
-
-.zapapi-env-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
 .zapapi-actions {
   display: flex;
   gap: var(--space-sm);
+  margin-left: auto;
 }
 
 .zapapi-body {
@@ -1011,7 +998,7 @@ function onSave() {
   transition-delay: 60ms;
 }
 
-.response-region__expanded > * {
+.response-region__expanded>* {
   min-height: 0;
 }
 
