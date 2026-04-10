@@ -50,10 +50,16 @@ export function useAccounts() {
 
   const decryptAllAccounts = async (masterKey: CryptoKey | null) => {
     if (!masterKey) return
+    const z = (window as any).ztools
     for (const acc of accounts.value) {
       if (acc.encrypted && acc.secret.includes(':')) {
-        acc.secret = await decryptSecret(acc.secret, masterKey)
-        acc.encrypted = false
+        try {
+          acc.secret = await decryptSecret(acc.secret, masterKey)
+          acc.encrypted = false
+        } catch (e) {
+          console.error('Decrypt failed for', acc.id, e)
+          z?.showNotification?.(`账户「${acc.name}」数据已损坏，无法解密`)
+        }
       }
     }
   }

@@ -119,6 +119,8 @@ const initialize = async () => {
     document.documentElement.removeAttribute('data-theme')
   }
 
+  z?.setExpendHeight?.(552)
+
   await loadAccounts(masterSalt, masterKey, config, {
     onAutoUnlock: tryAutoUnlock,
     onDecryptAll: () => decryptAllAccounts(masterKey.value),
@@ -523,7 +525,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
           v-for="(acc, index) in filteredAccounts" 
           :key="acc.id" 
           :acc="acc" 
-          :index="index"
+          :index="accounts.indexOf(acc)"
           :token="tokens[acc.id]"
           :nextToken="nextTokens[acc.id]"
           :timeLeft="getAccountTimeLeft(acc)"
@@ -757,7 +759,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   backdrop-filter: blur(14px);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 17.4px 18px;
+  padding: 18px 18px;
   position: relative;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   display: flex;

@@ -68,3 +68,38 @@ export function matchesPinyin(name: string, query: string, scheme: PinyinScheme)
 
   return false
 }
+
+export interface PinyinCache {
+  full: string    // 全拼连写
+  initials: string // 首字母
+  double: Partial<Record<DoubleSchemeName, string>> // 各双拼方案
+}
+
+/**
+ * 预计算一个名称的所有拼音形式，结果可缓存复用
+ */
+export function buildPinyinCache(name: string): PinyinCache {
+  const syllables = pinyin(name, { toneType: 'none', type: 'array' }) as string[]
+  const full = syllables.join('')
+  const initials = syllables.map(s => s[0]).join('')
+  const double: Partial<Record<DoubleSchemeName, string>> = {}
+  for (const scheme of ['ziranma', 'xiaohe', 'pinyinjiajia', 'microsoft', 'sogou'] as DoubleSchemeName[]) {
+    double[scheme] = syllables.map(s => fullToDouble(s, scheme)).join('')
+  }
+  return { full, initials, double }
+}
+
+/**
+ * 使用预计算缓存进行匹配，避免重复调用 pinyin-pro
+ */
+export function matchesPinyinCached(name: string, query: string, scheme: PinyinScheme, cache: PinyinCache): boolean {
+  if (!name || !query) return false
+  const q = query.toLowerCase()
+
+  if (name.toLowerCase().includes(q)) return true
+  if (cache.full.includes(q)) return true
+  if (cache.initials.includes(q)) return true
+  if (scheme !== 'quanpin' && cache.double[scheme as DoubleSchemeName]?.includes(q)) return true
+
+  return false
+}
