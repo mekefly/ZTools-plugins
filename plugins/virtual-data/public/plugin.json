@@ -4,7 +4,7 @@
   "title": "虚拟数据",
   "description": "使用mockjs生成虚拟数据便于使用",
   "author": "Jeffrey",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.html",
   "preload": "preload/services.js",
   "logo": "logo.png",
