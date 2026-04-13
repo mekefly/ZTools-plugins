@@ -1,7 +1,3 @@
-# virtual-data
-
-> A ZTools plugin for generating virtual data
-
 ## 📖 使用指南
 
 ### 1. 数据配置
