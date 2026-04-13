@@ -4,7 +4,7 @@
   "title": "速记盒",
   "description": "按分类快速记录数据,快捷复制使用",
   "author": "Jeffrey",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "index.html",
   "preload": "preload/services.js",
   "logo": "logo.png",
