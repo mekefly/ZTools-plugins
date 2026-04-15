@@ -1,18 +1,42 @@
 /**
- * 这是一个桥接层，用于调用注入在 window 中的 Node.js 能力。
- * 根据用户说明，这些能力通过 public/preload 注入。
+ * 用于预加载脚本公开的文件系统操作的桥接接口。
+ * 提供对Node.js文件系统功能的类型安全抽象。
  */
-
 export interface FSBridge {
+  /**
+   * 将文件或目录从旧路径重命名到新路径。
+   * @param oldPath - 当前文件路径
+   * @param newPath - 目标文件路径
+   */
   rename: (oldPath: string, newPath: string) => Promise<void>;
+  /**
+   * 检查给定路径是否存在文件或目录。
+   * @param path - 要检查是否存在的路径
+   * @returns 如果路径存在则返回true，否则返回false
+   */
   exists: (path: string) => Promise<boolean>;
+  /**
+   * 获取给定路径的详细文件统计信息。
+   * @param path - 要获取统计信息的路径
+   * @returns 包含文件元数据的对象，如果未找到则返回null
+   */
   getStats: (path: string) => Promise<any>;
 }
 
-// 假设注入在 window.services 中
+/** 通过window.services公开的桥接引用 */
 const bridge = (window as any).services as FSBridge;
 
+/**
+ * 提供对预加载桥接文件系统操作的安全包装。
+ * 处理错误情况并提供一致的返回类型。
+ */
 export const fsBridge = {
+  /**
+   * 将文件从oldPath重命名到newPath。
+   * @param oldPath - 当前文件路径
+   * @param newPath - 目标文件路径
+   * @returns 包含成功状态和可选错误消息的对象
+   */
   async rename(oldPath: string, newPath: string): Promise<{ success: boolean; error?: string }> {
     if (!bridge) {
       console.error('Bridge not found. Make sure preload script is loaded.');
@@ -26,6 +50,11 @@ export const fsBridge = {
     }
   },
 
+  /**
+   * 检查指定路径是否存在文件或目录。
+   * @param targetPath - 要检查是否存在的路径
+   * @returns 如果路径存在则返回true，否则返回false
+   */
   async exists(targetPath: string): Promise<boolean> {
     if (!bridge || typeof bridge.exists !== 'function') {
       return false;
@@ -38,6 +67,11 @@ export const fsBridge = {
     }
   },
 
+  /**
+   * 获取给定路径的详细文件统计信息。
+   * @param targetPath - 要获取文件统计信息的路径
+   * @returns 包含文件元数据（大小、时间戳、类型）的对象，如果未找到则返回null
+   */
   async getStats(targetPath: string): Promise<{
     isFile: boolean;
     isDirectory: boolean;
@@ -55,7 +89,5 @@ export const fsBridge = {
     } catch {
       return null;
     }
-  },
-
-  // 其他能力可以在此扩展
+  }
 };

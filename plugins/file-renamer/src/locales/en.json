@@ -10,6 +10,7 @@
     "start_rename": "Run Process",
     "import_files": "Import Files",
     "clear_all": "Clear List",
+    "beginner_guide": "Beginner Guide",
     "settings": "Settings",
     "metadata": "File Info",
     "no_rules": "Add a rule to start building your flow",
@@ -37,6 +38,25 @@
     "template_token_year": "Four-digit year",
     "template_token_month": "Two-digit month",
     "template_token_day": "Two-digit day"
+  },
+  "onboarding": {
+    "entry_title": "Guide Is Always Available",
+    "entry_description": "Use this button anytime to replay the onboarding walkthrough.",
+    "import_title": "Step 1: Import Files",
+    "import_description": "Import files first. You can use the button or drag files into the preview area.",
+    "workflow_title": "Step 2: Build Workflow",
+    "workflow_description": "The left panel is your workflow. Rules run from top to bottom in order.",
+    "rule_title": "Step 3: Add Rules",
+    "rule_description": "Click Add Rule and configure plugins like replace, sequence, or template.",
+    "reorder_title": "Step 4: Drag To Reorder",
+    "reorder_description": "You can drag rule cards up or down to change execution order.",
+    "preview_title": "Step 5: Verify Preview",
+    "preview_description": "The table shows real-time output names. Check results before running batch rename.",
+    "run_title": "Final Step: Run Batch",
+    "run_description": "Click here to execute rename. Processed files can be reverted in the table.",
+    "next": "Next",
+    "prev": "Previous",
+    "done": "Done"
   },
   "plugins": {
     "replace": {
@@ -146,6 +166,7 @@
     "clean-name": {
       "name": "Name Cleanup",
       "description": "Clean whitespace, illegal characters, and redundant dots.",
+      "fallback_name": "untitled",
       "fields": {
         "trim": {
           "label": "Trim Edges",

@@ -1,40 +1,62 @@
 import type { PluginActionDefinition, WorkflowContext } from '../core/types';
+import {
+  pluginDescription,
+  pluginFieldDescription,
+  pluginFieldLabel,
+  pluginFieldOptionLabel,
+  pluginName
+} from './i18n';
 
+/**
+ * 用于在文件名中添加序列号的插件。
+ * 支持自定义起始值、步长、填充和位置选项。
+ */
 export const sequencePlugin: PluginActionDefinition = {
   id: 'sequence',
-  name: '智能序列号',
-  description: '在文件名中插入自动递增的序列号。',
+  name: pluginName('sequence', 'Smart Sequence'),
+  description: pluginDescription('sequence', 'Append increasing numbers to file names.'),
   configSchema: {
     start: {
       type: 'number',
-      label: '起始数字',
+      label: pluginFieldLabel('sequence', 'start', 'Start'),
       default: 1,
-      description: '第一个文件使用的序号。'
+      description: pluginFieldDescription('sequence', 'start', 'Starting number for the first file.')
     },
     step: {
       type: 'number',
-      label: '步长',
+      label: pluginFieldLabel('sequence', 'step', 'Step'),
       default: 1,
-      description: '每个文件递增的数值，例如 2 会得到 1,3,5。'
+      description: pluginFieldDescription('sequence', 'step', 'Increment value between files.')
     },
     padding: {
       type: 'number',
-      label: '位数补齐',
+      label: pluginFieldLabel('sequence', 'padding', 'Padding'),
       default: 2,
-      description: '不足位数时左侧补零，例如 2 位会显示为 01。'
+      description: pluginFieldDescription('sequence', 'padding', 'Left-pad with zeros to this length.')
     },
     position: { 
       type: 'select', 
-      label: '插入位置', 
-      description: '序号位置或直接替换。',
+      label: pluginFieldLabel('sequence', 'position', 'Position'),
+      description: pluginFieldDescription('sequence', 'position', 'Number position or full replace.'),
       options: [
-        { label: '前缀', value: 'prefix' },
-        { label: '后缀', value: 'suffix' },
-        { label: '直接替换文件名', value: 'replace' }
+        { label: pluginFieldOptionLabel('sequence', 'position', 'prefix', 'Prefix'), value: 'prefix' },
+        { label: pluginFieldOptionLabel('sequence', 'position', 'suffix', 'Suffix'), value: 'suffix' },
+        { label: pluginFieldOptionLabel('sequence', 'position', 'replace', 'Replace File Name'), value: 'replace' }
       ],
       default: 'suffix'
     }
   },
+  /**
+   * 根据文件在批处理中的位置将序列号应用于文件名。
+   * @param currentName - 要转换的当前文件名
+   * @param config - 序列号生成的配置
+   * @param config.start - 第一个文件的起始编号
+   * @param config.step - 连续数字之间的增量
+   * @param config.padding - 最小数字长度（用零填充）
+   * @param config.position - 数字位置 ('prefix' | 'suffix' | 'replace')
+   * @param context - 包含文件索引的工作流上下文
+   * @returns 应用了序列号的转换后文件名
+   */
   apply: (currentName: string, config: any, context: WorkflowContext) => {
     const rawStart = Number(config?.start ?? 1);
     const rawStep = Number(config?.step ?? 1);

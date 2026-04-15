@@ -10,6 +10,7 @@
     "start_rename": "批量处理",
     "import_files": "导入文件",
     "clear_all": "清空列表",
+    "beginner_guide": "新手引导",
     "settings": "设置",
     "metadata": "属性信息",
     "no_rules": "请点击下方按钮添加处理规则",
@@ -37,6 +38,25 @@
     "template_token_year": "四位年份",
     "template_token_month": "两位月份",
     "template_token_day": "两位日期"
+  },
+  "onboarding": {
+    "entry_title": "随时可重看引导",
+    "entry_description": "点击这里可再次打开新手引导，快速回顾核心操作。",
+    "import_title": "第一步：导入文件",
+    "import_description": "先导入需要处理的文件，可用按钮选择，也支持拖拽到右侧区域。",
+    "workflow_title": "第二步：配置工作流",
+    "workflow_description": "左侧是规则工作流，规则会按从上到下的顺序依次执行。",
+    "rule_title": "第三步：添加规则",
+    "rule_description": "点击添加规则，选择替换、序列号、模板等插件并调整参数。",
+    "reorder_title": "第四步：拖拽调整顺序",
+    "reorder_description": "规则卡片支持直接拖拽，上下移动即可改变执行顺序。",
+    "preview_title": "第五步：确认预览结果",
+    "preview_description": "右侧表格会实时展示新文件名，先检查无误再执行，避免批量误改。",
+    "run_title": "最后一步：批量处理",
+    "run_description": "确认后点击这里执行重命名；已处理文件可在表格中撤回。",
+    "next": "下一步",
+    "prev": "上一步",
+    "done": "完成"
   },
   "plugins": {
     "replace": {
@@ -146,6 +166,7 @@
     "clean-name": {
       "name": "文件名清洗",
       "description": "清理空白、非法字符和多余点号。",
+      "fallback_name": "未命名",
       "fields": {
         "trim": {
           "label": "去除首尾空白",

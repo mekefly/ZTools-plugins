@@ -1,17 +1,35 @@
 import type { PluginActionDefinition, WorkflowContext } from '../core/types';
+import {
+  pluginDescription,
+  pluginFieldDescription,
+  pluginFieldLabel,
+  pluginName
+} from './i18n';
 
+/**
+ * 用于使用模板和占位符生成文件名的插件。
+ * 支持各种占位符，包括名称、扩展名、索引和日期值。
+ */
 export const templatePlugin: PluginActionDefinition = {
   id: 'template',
-  name: '模板替换',
-  description: '使用占位符定义复杂的文件名结构（如 [NAME]_[INDEX]）。',
+  name: pluginName('template', 'Template'),
+  description: pluginDescription('template', 'Build names quickly with placeholders.'),
   configSchema: {
     template: { 
       type: 'string', 
-      label: '模板内容', 
+      label: pluginFieldLabel('template', 'template', 'Template'),
       default: '[NAME]_[INDEX]',
-      description: '支持：[NAME], [EXT], [INDEX], [YYYY], [MM], [DD]，示例：[NAME]_[YYYY][MM][DD]_[INDEX]'
+      description: pluginFieldDescription('template', 'template', 'Supports [NAME] [EXT] [INDEX] [YYYY] [MM] [DD].')
     }
   },
+  /**
+   * 使用带占位符的模板转换文件名。
+   * @param currentName - 要转换的当前文件名
+   * @param config - 包含模板字符串的配置
+   * @param config.template - 带占位符的模板字符串 ([NAME], [EXT], [INDEX], [YYYY], [MM], [DD])
+   * @param context - 包含文件元数据的工作流上下文
+   * @returns 基于模板的转换后文件名
+   */
   apply: (currentName: string, config: any, context: WorkflowContext) => {
     const { template = '[NAME]' } = config;
     const lastDot = currentName.lastIndexOf('.');

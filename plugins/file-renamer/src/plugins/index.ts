@@ -8,6 +8,10 @@ import { cleanNamePlugin } from './clean-name';
 import { extensionTransformPlugin } from './extension-transform';
 import { uniqueifyPlugin } from './uniqueify';
 
+/**
+ * 聚合所有内置插件以进行集中导出。
+ * 这些插件在应用程序初始化时自动注册。
+ */
 export const builtInPlugins = [
   replacePlugin,
   addPrefixSuffixPlugin,

@@ -1,24 +1,43 @@
 import type { PluginActionDefinition } from '../core/types';
+import {
+  pluginDescription,
+  pluginFieldDescription,
+  pluginFieldLabel,
+  pluginFieldOptionLabel,
+  pluginName
+} from './i18n';
 
+/**
+ * 用于转换文件名大小写风格的插件。
+ * 支持各种大小写约定，包括小写、大写、标题式、驼峰式和蛇形式。
+ */
 export const caseTransformPlugin: PluginActionDefinition = {
   id: 'case-transform',
-  name: '大小写转换',
-  description: '快速将文件名转换为全大写、全小写或首字母大写等格式。',
+  name: pluginName('case-transform', 'Case Transform'),
+  description: pluginDescription('case-transform', 'Convert names to different case styles.'),
   configSchema: {
     mode: { 
       type: 'select', 
-      label: '转换模式', 
-      description: '选择目标命名风格，扩展名会自动保留。',
+      label: pluginFieldLabel('case-transform', 'mode', 'Mode'),
+      description: pluginFieldDescription('case-transform', 'mode', 'Choose the target naming style.'),
       options: [
-        { label: '全部小写 (lower case)', value: 'lower' },
-        { label: '全部大写 (UPPER CASE)', value: 'upper' },
-        { label: '首字母大写 (Title Case)', value: 'title' },
-        { label: '驼峰命名 (camelCase)', value: 'camel' },
-        { label: '蛇形命名 (snake_case)', value: 'snake' }
+        { label: pluginFieldOptionLabel('case-transform', 'mode', 'lower', 'lower case'), value: 'lower' },
+        { label: pluginFieldOptionLabel('case-transform', 'mode', 'upper', 'UPPER CASE'), value: 'upper' },
+        { label: pluginFieldOptionLabel('case-transform', 'mode', 'title', 'Title Case'), value: 'title' },
+        { label: pluginFieldOptionLabel('case-transform', 'mode', 'camel', 'camelCase'), value: 'camel' },
+        { label: pluginFieldOptionLabel('case-transform', 'mode', 'snake', 'snake_case'), value: 'snake' }
       ],
       default: 'lower'
     }
   },
+  /**
+   * 将文件名转换为指定的大小写风格。
+   * 处理基本名称并保留文件扩展名。
+   * @param currentName - 要转换的当前文件名
+   * @param config - 包含大小写模式的配置对象
+   * @param config.mode - 目标大小写风格 ('lower' | 'upper' | 'title' | 'camel' | 'snake')
+   * @returns 应用了所选大小写风格的转换后文件名
+   */
   apply: (currentName: string, config: any) => {
     const { mode } = config;
     const lastDot = currentName.lastIndexOf('.');
