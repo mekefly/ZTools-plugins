@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * 对话框内容组件。
+ * @description 对话框主体内容区域，包含遮罩层和内容面板，支持动画效果
+ * @see FRDialog 对话框根组件
+ */
 import { type HTMLAttributes, computed } from 'vue'
 import {
   DialogClose,

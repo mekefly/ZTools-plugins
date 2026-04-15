@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * 选择器内容组件。
+ * @description 选择器的下拉列表内容区域
+ * @see FRSelect 选择器根组件
+ */
 import { type HTMLAttributes, computed } from 'vue'
 import {
   SelectContent,

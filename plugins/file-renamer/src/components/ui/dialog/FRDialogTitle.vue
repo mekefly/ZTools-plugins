@@ -1,4 +1,8 @@
 <script setup lang="ts">
+/**
+ * 对话框标题组件。
+ * @description 对话框的标题文本，使用Radix Vue的DialogTitle实现
+ */
 import { type HTMLAttributes, computed } from 'vue'
 import { DialogTitle, type DialogTitleProps, useForwardProps } from 'radix-vue'
 import { cn } from '@/lib/utils'

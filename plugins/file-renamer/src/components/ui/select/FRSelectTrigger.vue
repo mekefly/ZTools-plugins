@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * 选择器触发器组件。
+ * @description 选择器的下拉触发按钮，显示当前选中的值
+ * @extends SelectTrigger 来自Radix Vue
+ */
 import { type HTMLAttributes, computed } from 'vue'
 import { SelectIcon, SelectTrigger, type SelectTriggerProps, useForwardProps } from 'radix-vue'
 import { ChevronDown } from 'lucide-vue-next'

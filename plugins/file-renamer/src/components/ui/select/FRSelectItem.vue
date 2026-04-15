@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * 选择器选项组件。
+ * @description 选择器的单个选项项，包含选中状态指示器
+ * @extends SelectItem 来自Radix Vue
+ */
 import { type HTMLAttributes, computed } from 'vue'
 import {
   SelectItem,
