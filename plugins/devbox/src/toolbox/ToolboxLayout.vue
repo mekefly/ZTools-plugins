@@ -28,7 +28,7 @@ function isActive(tool: Tool): boolean {
           @click="emit('select', tool.code)"
         >
           <span class="tool-icon">{{ tool.icon }}</span>
-          <span class="tool-name">{{ tool.name }}</span>
+          <span class="tool-name">{{ tool.explain }}</span>
         </div>
       </template>
     </aside>
@@ -41,7 +41,7 @@ function isActive(tool: Tool): boolean {
 <style scoped>
 .toolbox-layout {
   display: flex;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -103,6 +103,39 @@ function isActive(tool: Tool): boolean {
   flex: 1;
   overflow-y: auto;
   min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .toolbox-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color, #e5e5e5);
+    display: flex;
+    flex-wrap: wrap;
+    padding: 4px 8px;
+    gap: 2px;
+  }
+
+  .cat-title {
+    display: none;
+  }
+
+  .tool-item {
+    padding: 5px 10px;
+    border-left: none;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .tool-item.active {
+    border-left: none;
+    background: #667eea;
+    color: #fff;
+  }
 }
 
 @media (prefers-color-scheme: dark) {

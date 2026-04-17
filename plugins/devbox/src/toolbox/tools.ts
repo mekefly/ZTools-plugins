@@ -8,7 +8,7 @@ import Signature from '../tools/Signature/index.vue'
 
 export interface Tool {
   code: string
-  name: string
+  explain: string
   icon: string
   component: Component
 }
@@ -24,18 +24,18 @@ export const categories: Category[] = [
     name: '随机/生成',
     code: 'random',
     tools: [
-      { code: 'identity', name: '随机身份', icon: '', component: Identity },
-      { code: 'password', name: '随机密码', icon: '', component: RandomPassword },
-      { code: 'number', name: '随机数字', icon: '', component: RandomNumber },
-      { code: 'uuid', name: 'UUID生成', icon: '', component: UUID },
-      { code: 'color', name: '随机颜色', icon: '', component: RandomColor },
+      { code: 'identity', explain: '随机身份', icon: '', component: Identity },
+      { code: 'password', explain: '随机密码', icon: '', component: RandomPassword },
+      { code: 'number', explain: '随机数字', icon: '', component: RandomNumber },
+      { code: 'uuid', explain: 'UUID生成', icon: '', component: UUID },
+      { code: 'color', explain: '随机颜色', icon: '', component: RandomColor },
     ]
   },
   {
     name: '加密/安全',
     code: 'crypto',
     tools: [
-      { code: 'signature', name: '加密签名', icon: '', component: Signature },
+      { code: 'signature', explain: '加密签名', icon: '', component: Signature },
     ]
   }
 ]
