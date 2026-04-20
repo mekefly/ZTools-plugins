@@ -12,6 +12,7 @@
     "prepare": "vp config"
   },
   "dependencies": {
+    "@ztools-center/ztools-api-types": "^1.0.1",
     "tailwindcss": "^4.2.2",
     "vue": "3.6.0-beta.10"
   },

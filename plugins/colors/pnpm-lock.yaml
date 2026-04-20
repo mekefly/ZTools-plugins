@@ -31,6 +31,9 @@ importers:
 
   .:
     dependencies:
+      '@ztools-center/ztools-api-types':
+        specifier: ^1.0.1
+        version: 1.0.3
       tailwindcss:
         specifier: ^4.2.2
         version: 4.2.2
@@ -891,6 +894,9 @@ packages:
         optional: true
       vue:
         optional: true
+
+  '@ztools-center/ztools-api-types@1.0.3':
+    resolution: {integrity: sha512-dv1eOAIasAupqKaQL/gESk1i2+RebdM/1gvZhrvH2D/bo3enCUsAGJ8nrHnlCLBSOGB81eC/SU0IH8BNsUlmvA==}
 
   alien-signals@3.1.2:
     resolution: {integrity: sha512-d9dYqZTS90WLiU0I5c6DHj/HcKkF8ZyGN3G5x8wSbslulz70KOxaqCT0hQCo9KOyhVqzqGojvNdJXoTumZOtcw==}
@@ -2091,6 +2097,8 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
       vue: 3.6.0-beta.10(typescript@6.0.3)
+
+  '@ztools-center/ztools-api-types@1.0.3': {}
 
   alien-signals@3.1.2: {}
 
