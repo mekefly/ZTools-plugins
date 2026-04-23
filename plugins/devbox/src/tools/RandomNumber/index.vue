@@ -10,10 +10,13 @@ const results = ref<number[]>([])
 
 function generate() {
   const res: number[] = []
+  const randArray = new Uint32Array(Math.min(count.value, 100))
+  crypto.getRandomValues(randArray)
   for (let i = 0; i < Math.min(count.value, 100); i++) {
+    const rawRand = randArray[i] / 0xFFFFFFFF
     const val = decimalPlaces.value > 0
-      ? parseFloat((Math.random() * (max.value - min.value) + min.value).toFixed(decimalPlaces.value))
-      : Math.floor(Math.random() * (max.value - min.value + 1)) + min.value
+      ? parseFloat((rawRand * (max.value - min.value) + min.value).toFixed(decimalPlaces.value))
+      : Math.floor(rawRand * (max.value - min.value + 1)) + min.value
     res.push(val)
   }
   results.value = res

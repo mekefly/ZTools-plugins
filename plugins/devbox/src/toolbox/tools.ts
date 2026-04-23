@@ -6,6 +6,7 @@ import UUID from '../tools/UUID/index.vue'
 import RandomColor from '../tools/RandomColor/index.vue'
 import Signature from '../tools/Signature/index.vue'
 import Pinyin from '../tools/Pinyin/index.vue'
+import Qrcode from '../tools/Qrcode/index.vue'
 
 export interface Tool {
   code: string
@@ -44,6 +45,13 @@ export const categories: Category[] = [
     code: 'text',
     tools: [
       { code: 'pinyin', explain: '中文转拼音命名', icon: '', component: Pinyin },
+    ]
+  },
+  {
+    name: '图像',
+    code: 'image',
+    tools: [
+      { code: 'qrcode', explain: '二维码', icon: '', component: Qrcode },
     ]
   }
 ]

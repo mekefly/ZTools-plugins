@@ -9,9 +9,9 @@ declare module '*.vue' {
 
 // Preload services 类型声明（对应 public/preload/services.js）
 interface Services {
-  readFile: (file: string) => string
-  writeTextFile: (text: string) => string
-  writeImageFile: (base64Url: string) => string | undefined
+  readFile: (file: string) => Promise<string>
+  writeTextFile: (text: string) => Promise<string>
+  writeImageFile: (base64Url: string) => Promise<string | undefined>
 }
 
 declare global {

@@ -58,10 +58,21 @@ function copyText(text: string) {
 
 // ====== 工具函数 ======
 function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+  const rand = new Uint32Array(1)
+  crypto.getRandomValues(rand)
+  return arr[rand[0] % arr.length]
 }
-function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
+
+function randInt(min: number, max: number): number {
+  const rand = new Uint32Array(1)
+  crypto.getRandomValues(rand)
+  return Math.floor(rand[0] % (max - min + 1)) + min
+}
+
+function randBool(): boolean {
+  const rand = new Uint32Array(1)
+  crypto.getRandomValues(rand)
+  return rand[0] % 2 === 1
 }
 
 // ====== 身份证校验码计算 ======
@@ -79,14 +90,14 @@ function calcCheckCode(id17: string): string {
 // ====== 生成函数 ======
 function generateOne(): IdentityInfo {
   const surname = pick(surnames)
-  const nameLen = Math.random() > 0.5 ? 2 : 1
+  const nameLen = randBool() ? 2 : 1
   let name = ''
   for (let i = 0; i < nameLen; i++) {
     name += pick(nameChars)
   }
   const fullName = surname + name
 
-  const gender: string = Math.random() > 0.5 ? '男' : '女'
+  const gender: string = randBool() ? '男' : '女'
   const age = randInt(18, 60)
   const currentYear = new Date().getFullYear()
   const birthYear = currentYear - age
@@ -139,10 +150,10 @@ function generateOne(): IdentityInfo {
   let bankCard = '62'
   for (let i = 0; i < 14; i++) bankCard += randInt(0, 9)
 
-  const prefixLen = Math.random() > 0.5 ? 3 : 2
+  const prefixLen = randBool() ? 3 : 2
   let companyPrefix = ''
   for (let i = 0; i < prefixLen; i++) {
-    companyPrefix += Math.random() > 0.5 ? pick(companyChars1) : pick(companyChars2)
+    companyPrefix += randBool() ? pick(companyChars1) : pick(companyChars2)
   }
   const company = companyPrefix + pick(companySuffixes)
 

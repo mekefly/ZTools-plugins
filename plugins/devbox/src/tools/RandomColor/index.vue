@@ -22,9 +22,11 @@ function rgbToHex(r: number, g: number, b: number): string {
 }
 
 function generateRandom() {
-  hue.value = Math.floor(Math.random() * 360)
-  saturation.value = Math.floor(Math.random() * 60) + 40
-  lightness.value = Math.floor(Math.random() * 40) + 30
+  const rand = new Uint32Array(3)
+  crypto.getRandomValues(rand)
+  hue.value = rand[0] % 360
+  saturation.value = (rand[1] % 60) + 40
+  lightness.value = (rand[2] % 40) + 30
   applyColor()
 }
 

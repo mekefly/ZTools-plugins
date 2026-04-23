@@ -82,6 +82,37 @@ public/
 - 数据展示使用等宽字体（Consolas / Courier New）
 - UI 框架：Element Plus（全局注册）+ `@element-plus/icons-vue`（全量注册图标）
 
+## 代码审查清单
+
+每次新增或修改代码时，应检查以下项：
+
+### 1. API 兼容性与安全性
+- **Web API**：检查 MDN 兼容性表，确认目标浏览器支持（Chrome/Edge 最新版 + Electron）
+- **废弃 API**：避免使用已标记 deprecated 的 API（如 `document.execCommand`）
+- **安全限制**：Canvas `getImageData` 对跨域图片有安全限制；`clipboard.write` 需要 HTTPS 或 Electron
+
+### 2. 性能优化
+- **大文件处理**：图片/文件应先缩放/裁剪再处理，避免内存溢出
+- **避免中间转换**：优先使用 `canvas.toBlob()` 而非 `toDataURL()` → `fetch()` → `blob`
+- **事件监听**：组件级监听优于全局 `document` 监听，确保 `onUnmounted` 时清理
+- **异步操作**：大计算量操作考虑 Web Worker 或分片处理
+
+### 3. 最佳实践
+- **图片处理**：优先 `createImageBitmap()`（现代浏览器性能更好）而非 `new Image()`
+- **文件读取**：`FileReader` 标准可用，但大文件考虑 `URL.createObjectURL()` 避免内存膨胀
+- **Base64 使用**：仅用于小数据（<100KB），大文件用 Blob/File 对象
+- **Clipboard API**：`navigator.clipboard.write()` 需检查 `blob.type` 支持（部分浏览器只支持 PNG）
+
+### 4. 错误处理
+- 用户输入验证（空值、超长内容、无效格式）
+- API 调用失败降级方案（ZTools → 浏览器原生 → 提示不支持）
+- 异步操作 catch 错误并友好提示
+
+### 5. 第三方库检查
+- npm 库是否维护活跃（近期 release、issues 处理）
+- 是否有更轻量的替代方案
+- TypeScript 类型是否完善
+
 ## 开发注意事项
 
 - **始终编辑 `public/plugin.json`**，根目录的 `plugin.json` 是过时副本

@@ -1,281 +1,158 @@
-# myplugins
+# 开发百宝箱 (devbox)
 
-> 生成虚拟的随机身份信息，用于测试场景
+一款集成在 ZTools 中的实用工具箱，提供随机身份、密码、数字、UUID、颜色、加密签名、中文转拼音等多种生成工具。
 
-这是一个使用 **Vue 3 + Vite + TypeScript** 构建的 ZTools 插件。
+![项目预览](./index.png)
 
-## ✨ 功能特性
+## 工具列表
 
-### 📌 已包含的示例功能
+### 随机身份生成器
+**触发指令**: `身份` / `身份证` / `随机身份` / `identity`
 
-- **Hello** - 基础功能指令示例
-  - 触发指令：`你好` / `hello`
-  - 展示简单的 Vue 组件界面
+生成虚拟的身份信息，包含 16 个字段：
+姓名、性别、年龄、身高、体重、血型、学历、婚姻、身份证号、手机号码、银行卡号、家庭住址、公司、职位、QQ、邮箱
 
-- **读文件** - 文件读取功能示例
-  - 功能指令：`读文件`
-  - 匹配指令：支持拖拽文件触发
-  - 演示如何使用 Node.js 能力读取文件内容
-
-- **保存为文件** - 文件写入功能示例
-  - 匹配指令：任意文本/图片 → `保存为文件`
-  - 演示如何将剪贴板内容保存为文件
-
-## 📁 项目结构
-
-```
-.
-├── public/
-│   ├── logo.png              # 插件图标
-│   ├── plugin.json           # 插件配置文件
-│   └── preload/              # Preload 脚本目录
-│       ├── package.json      # Preload 依赖配置
-│       └── services.js       # Node.js 能力扩展
-├── src/
-│   ├── main.ts               # 入口文件
-│   ├── main.css              # 全局样式
-│   ├── App.vue               # 根组件
-│   ├── env.d.ts              # 类型声明
-│   ├── Hello/                # Hello 功能组件
-│   │   └── index.vue
-│   ├── Read/                 # 读文件功能组件
-│   │   └── index.vue
-│   └── Write/                # 写文件功能组件
-│       └── index.vue
-├── index.html                # HTML 模板
-├── vite.config.js            # Vite 配置
-├── tsconfig.json             # TypeScript 配置
-├── package.json              # 项目依赖
-└── README.md                 # 项目文档
-```
-
-## 🚀 快速开始
-
-### 安装依赖
-
-```bash
-npm install
-```
-
-### 开发模式
-
-```bash
-npm run dev
-```
-
-开发服务器将在 `http://localhost:5173` 启动。ZTools 会自动加载开发版本。
-
-### 构建生产版本
-
-```bash
-npm run build
-```
-
-构建产物将输出到 `dist/` 目录。
-
-## 📖 开发指南
-
-### 1. 修改插件配置
-
-编辑 `public/plugin.json` 文件：
-
-```json
-{
-  "name": "你的插件名称",
-  "description": "插件描述",
-  "author": "作者名称",
-  "version": "1.0.0",
-  "features": [
-    // 添加你的功能配置
-  ]
-}
-```
-
-### 2. 创建新功能
-
-#### 步骤 1: 创建 Vue 组件
-
-在 `src/` 目录下创建新的功能组件：
-
-```vue
-<!-- src/MyFeature/index.vue -->
-<template>
-  <div class="my-feature">
-    <h1>{{ title }}</h1>
-    <!-- 你的组件内容 -->
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const title = ref('我的新功能')
-</script>
-
-<style scoped>
-.my-feature {
-  padding: 20px;
-}
-</style>
-```
-
-#### 步骤 2: 注册路由
-
-在 `src/App.vue` 中添加路由：
-
-```vue
-<script setup lang="ts">
-import MyFeature from './MyFeature/index.vue'
-
-const routes = {
-  hello: Hello,
-  read: Read,
-  write: Write,
-  myfeature: MyFeature // 添加新路由
-}
-</script>
-```
-
-#### 步骤 3: 配置功能
-
-在 `plugin.json` 中添加功能配置：
-
-```json
-{
-  "code": "myfeature",
-  "explain": "我的新功能",
-  "icon": "logo.png",
-  "cmds": ["触发指令"]
-}
-```
-
-### 3. 使用 Node.js 能力
-
-#### 扩展 Preload 服务
-
-编辑 `public/preload/services.js`：
-
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-module.exports = {
-  // 示例：读取文件
-  readFile: (filePath) => {
-    return fs.readFileSync(filePath, 'utf-8')
-  },
-
-  // 添加你的服务
-  myService: (params) => {
-    // 实现你的逻辑
-    return result
-  }
-}
-```
-
-#### 在 Vue 组件中调用
-
-```vue
-<script setup lang="ts">
-const handleRead = async () => {
-  try {
-    const content = await window.services.readFile('/path/to/file')
-    console.log(content)
-  } catch (error) {
-    console.error('读取失败:', error)
-  }
-}
-</script>
-```
-
-### 4. 使用 ZTools API
-
-```vue
-<script setup lang="ts">
-// 获取剪贴板内容
-const text = await window.ztools.getClipboardContent()
-
-// 隐藏主窗口
-window.ztools.hideMainWindow()
-
-// 显示提示
-window.ztools.showTip('操作成功')
-
-// 更多 API 请参考官方文档
-</script>
-```
-
-## 🎨 样式开发
-
-### 使用 CSS 变量
-
-ZTools 提供了一套 CSS 变量用于主题适配：
-
-```css
-.my-component {
-  background: var(--bg-color);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-}
-```
-
-### 暗色模式支持
-
-```css
-@media (prefers-color-scheme: dark) {
-  .my-component {
-    /* 暗色模式样式 */
-  }
-}
-```
-
-## 📦 构建与发布
-
-### 1. 构建插件
-
-```bash
-npm run build
-```
-
-### 2. 测试构建产物
-
-将 `dist/` 目录中的所有文件复制到 ZTools 插件目录进行测试。
-
-### 3. 发布到插件市场
-
-1. 确保 `plugin.json` 中的信息完整准确
-2. 准备好插件截图和详细说明
-3. 访问 ZTools 插件市场提交插件
-
-## 📚 相关资源
-
-- [ZTools 官方文档](https://github.com/ztool-center/ztools)
-- [ZTools API 文档](https://github.com/ztool-center/ztools-api-types)
-- [Vue 3 文档](https://vuejs.org/)
-- [Vite 文档](https://vitejs.dev/)
-
-## ❓ 常见问题
-
-### Q: 如何调试插件？
-
-A: 使用 `npm run dev` 启动开发服务器，在插件界面中点击插件头像图标，在弹出的菜单中选择"打开开发者工具"进行调试。
-
-### Q: 如何访问 Node.js 能力？
-
-A: 通过 `public/preload/services.js` 文件扩展服务，然后在组件中使用 `window.services` 调用。
-
-### Q: 插件图标不显示？
-
-A: 确保 `public/logo.png` 文件存在，且在 `plugin.json` 中正确配置了 `logo` 字段。
-
-### Q: 如何处理大文件上传？
-
-A: 建议使用 Node.js 流式处理，在 preload 脚本中实现文件分块处理逻辑。
-
-## 📄 开源协议
-
-MIT License
+**功能**:
+- 批量生成（1-20 条）
+- 复制全部 / 复制 JSON
+- 导出 JSON / 导出 CSV
 
 ---
 
-**祝你开发愉快！** 🎉
+### 随机密码生成器
+**触发指令**: `密码` / `随机密码` / `password`
+
+生成安全的随机密码。
+
+**可配置选项**:
+- 密码长度（4-128 位）
+- 字符集：大写字母、小写字母、数字、特殊符号
+- 密码强度实时显示（弱/中/强/极强）
+
+**一键复制**生成的密码。
+
+---
+
+### 随机数字生成器
+**触发指令**: `随机数字` / `随机数` / `number`
+
+在指定范围内生成随机数字。
+
+**可配置选项**:
+- 最小值、最大值
+- 生成数量（1-1000 个）
+- 小数位数（0-10 位）
+
+---
+
+### UUID 生成器
+**触发指令**: `UUID` / `uuid` / `guid`
+
+生成符合 RFC 4122 v4 规范的 UUID。
+
+**可配置选项**:
+- 批量生成数量
+
+**一键复制**生成的 UUID。
+
+---
+
+### 随机颜色生成器
+**触发指令**: `随机颜色` / `颜色` / `color`
+
+生成随机颜色或手动调配。
+
+**功能**:
+- HSL 滑块精确调配颜色
+- 一键随机生成
+- 支持三种格式复制：HEX / RGB / HSL
+- 颜色历史记录
+
+---
+
+### 加密签名生成器
+**触发指令**: `加密` / `签名` / `hash` / `md5` / `sha`
+
+将参数按规则拼接后生成加密签名。
+
+**支持的算法**: MD5、SHA-1、SHA-256、SHA-512、HMAC-SHA256、HMAC-SHA512
+
+**功能**:
+- 自定义密钥（HMAC 模式需要）
+- 自定义分隔符
+- 结果一键复制
+
+---
+
+### 中文转拼音
+**触发指令**: `拼音` / `中文转拼音` / `pinyin`
+
+将中文文字转换为拼音。
+
+**输出格式**:
+- 全拼（小写/大写）
+- 驼峰命名（camelCase / PascalCase）
+- 下划线命名（snake_case）
+- 常量命名（SNAKE_CASE）
+- 首字母缩写
+
+---
+
+## 使用方式
+
+1. 在 ZTools 搜索栏输入上述任意触发指令
+2. 或在 ZTools 主界面点击「开发百宝箱」图标进入
+3. 工具支持**一键复制**结果到剪贴板
+
+---
+
+## 开发者说明
+
+> 以下内容面向插件开发者，普通用户无需关注。
+
+### 技术栈
+
+- Vue 3 + Vite + TypeScript
+- Element Plus UI 组件库
+
+### 项目结构
+
+```
+src/
+├── tools/                    # 工具组件目录
+│   ├── Identity/            # 随机身份
+│   ├── RandomPassword/      # 随机密码
+│   ├── RandomNumber/        # 随机数字
+│   ├── UUID/                # UUID 生成
+│   ├── RandomColor/         # 随机颜色
+│   ├── Signature/           # 加密签名
+│   └── Pinyin/             # 中文转拼音
+├── toolbox/
+│   ├── ToolboxLayout.vue   # 布局组件
+│   └── tools.ts            # 工具注册表
+└── App.vue                  # 根组件
+
+public/
+├── plugin.json              # 插件配置
+├── logo.png                # 插件图标
+└── preload/
+    └── services.js         # Node.js 桥接服务
+```
+
+### 开发命令
+
+```bash
+npm install     # 安装依赖
+npm run dev     # 启动开发服务器（http://localhost:5173）
+npm run build   # 构建生产版本
+```
+
+### 添加新工具
+
+1. 在 `src/tools/<ToolName>/index.vue` 创建 Vue 组件
+2. 在 `src/toolbox/tools.ts` 的 `categories` 数组中注册
+3. 在 `public/plugin.json` 的 `features` 数组中添加配置
+
+### 配置文件
+
+编辑 `public/plugin.json` 可修改插件名称、描述、版本及功能配置。每个功能的 `cmds` 数组定义了触发指令列表。
