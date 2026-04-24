@@ -35,6 +35,24 @@ async function saveRegistry(registry) {
   MEM_REGISTRY = registry;
   await fs.promises.writeFile(REGISTRY_FILE, JSON.stringify(registry, null, 2));
 }
+
+// 同步写入注册表（用于同步函数内的注册表更新，保持内存缓存一致）
+function saveRegistrySync(registry) {
+  MEM_REGISTRY = registry;
+  fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2));
+}
+
+// 同步读取注册表（优先使用内存缓存）
+function readRegistrySync() {
+  if (MEM_REGISTRY) return MEM_REGISTRY;
+  try {
+    const data = fs.readFileSync(REGISTRY_FILE, 'utf-8');
+    MEM_REGISTRY = JSON.parse(data);
+    return MEM_REGISTRY;
+  } catch (e) {
+    return [];
+  }
+}
 const AGENT_CONFIGS = [
   { id: 'antigravity', name: 'Antigravity', path: '.gemini/antigravity/skills' },
   { id: 'claudecode', name: 'Claude Code', path: '.claude/skills' },
@@ -439,6 +457,7 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
       });
 
       let errData = '';
+      let handled = false; // 防止 close 和 error 双触发导致重复重试
       const TIMEOUT_MS = 30000;
       let timeoutTimer = setTimeout(() => {
         if (onProgress) onProgress({ type: 'info', text: `[超时] 30秒无响应，正在切换线路...\n` });
@@ -451,6 +470,19 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
           if (onProgress) onProgress({ type: 'info', text: `[超时] 30秒无响应，正在切换线路...\n` });
           child.kill('SIGKILL');
         }, TIMEOUT_MS);
+      };
+
+      const handleFailure = (errorForReject) => {
+        if (handled) return;
+        handled = true;
+        clearTimeout(timeoutTimer);
+        mirrorIndex++;
+        if (mirrorIndex < mirrors.length) {
+          if (onProgress) onProgress({ type: 'info', text: `[回退] 尝试下一个镜像...\n` });
+          tryClone();
+        } else {
+          reject(errorForReject);
+        }
       };
 
       child.stderr.on('data', (data) => {
@@ -466,15 +498,10 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
       child.on('close', (code) => {
         clearTimeout(timeoutTimer);
         if (code === 0) {
-          resolve();
+          if (!handled) { handled = true; resolve(); }
         } else {
-          mirrorIndex++;
-          if (mirrorIndex < mirrors.length) {
-            if (onProgress) onProgress({ type: 'info', text: `[回退] 尝试下一个镜像...\n` });
-            tryClone();
-          } else {
-            const detail = errData.trim().replace(/[\r\n]+/g, ' ').substring(0, 300);
-            const proxyHint = `
+          const detail = errData.trim().replace(/[\r\n]+/g, ' ').substring(0, 300);
+          const proxyHint = `
 --------------------------------------------------
 💡 提示：所有同步线路均已失败。
 如果尝试多次依然不通，请检查网络或配置 Git 代理：
@@ -483,19 +510,12 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
    git config --global http.proxy http://127.0.0.1:7890
 3. 检查 GitHub 官网是否能正常访问
 --------------------------------------------------`;
-            reject(new Error(`克隆失败。${proxyHint}\n\n技术详情：${detail || '连接超时'}`));
-          }
+          handleFailure(new Error(`克隆失败。${proxyHint}\n\n技术详情：${detail || '连接超时'}`));
         }
       });
 
       child.on('error', (err) => {
-        clearTimeout(timeoutTimer);
-        mirrorIndex++;
-        if (mirrorIndex < mirrors.length) {
-          tryClone();
-        } else {
-          reject(err);
-        }
+        handleFailure(err);
       });
     }
     tryClone();
@@ -657,8 +677,7 @@ function installFromPreview(previewData, selectedSkillNames, targetPaths, repoUr
 
         // 更新注册表
         try {
-          let currentReg = [];
-          try { currentReg = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8')); } catch (e) { }
+          let currentReg = readRegistrySync();
 
           const targetIndex = currentReg.findIndex(r => r.localPath === finalDir);
           const uniqueId = targetIndex >= 0 ? currentReg[targetIndex].id : `${skill.name}_${Date.now()}`;
@@ -678,7 +697,7 @@ function installFromPreview(previewData, selectedSkillNames, targetPaths, repoUr
           } else {
             currentReg.push(newEntry);
           }
-          fs.writeFileSync(REGISTRY_FILE, JSON.stringify(currentReg, null, 2));
+          saveRegistrySync(currentReg);
         } catch (e) { }
       }
     }
@@ -716,7 +735,7 @@ async function uninstallSkill(skillId) {
   }
 
   try {
-    let registry = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8'));
+    let registry = readRegistrySync();
     await saveRegistry(registry.filter(s => s.id !== skillId));
   } catch (e) { }
 
@@ -1128,8 +1147,7 @@ async function distributeSkill(skillId, targetAgents) {
     fs.cpSync(skill.localPath, finalDir, { recursive: true });
 
     try {
-      let currentReg = [];
-      try { currentReg = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf-8')); } catch (e) { }
+      let currentReg = readRegistrySync();
       if (!currentReg.some(r => r.localPath === finalDir)) {
         currentReg.push({
           id: `${skill.name}_${agent}_${Date.now()}`,
