@@ -388,7 +388,7 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
       });
 
       let errData = '';
-      const TIMEOUT_MS = 10000;
+      const TIMEOUT_MS = 30000;
       let timeoutTimer = setTimeout(() => {
         if (onProgress) onProgress({ type: 'info', text: `[超时] 10秒无响应，正在切换线路...\n` });
         child.kill('SIGKILL');
