@@ -499,6 +499,7 @@ const batchUpdate = async () => {
       if (window.ztools) window.ztools.showNotification(summary)
       else alert(summary)
       await loadSkills()
+      batchSelected.value = [] // 更新完成后清除选中，避免误解
     }
   } catch (e: any) { alert('批量更新异常: ' + (e?.message || String(e))) }
   finally { loading.value = false; batchProcessing.value = false }
@@ -828,7 +829,7 @@ const confirmImport = async () => {
             </div>
           </div>
           <div class="card-footer">
-            <button class="btn-ghost-primary" @click="handleUpdate(skill.id)" :disabled="loading" title="同步源端">
+            <button class="btn-ghost-primary" @click.stop="handleUpdate(skill.id)" :disabled="loading" title="同步源端">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"></polyline>
@@ -837,7 +838,7 @@ const confirmImport = async () => {
               </svg>
               <span v-if="viewMode === 'grid'">更新</span>
             </button>
-            <button class="btn-ghost-danger" @click="handleDelete(skill.id)" :disabled="loading" title="卸载">
+            <button class="btn-ghost-danger" @click.stop="handleDelete(skill.id)" :disabled="loading" title="卸载">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
@@ -937,13 +938,13 @@ const confirmImport = async () => {
                     <span class="child-date">{{ new Date(skill.updatedAt).toLocaleDateString() + ' ' + new
                       Date(skill.updatedAt).getHours() + ':' + new
                         Date(skill.updatedAt).getMinutes().toString().padStart(2, '0') }}</span>
-                    <button class="btn-icon-sm" @click="openLocalPath(skill.localPath)" title="打开目录">
+                    <button class="btn-icon-sm" @click.stop="openLocalPath(skill.localPath)" title="打开目录">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                       </svg>
                     </button>
-                    <button class="btn-icon-sm primary" @click="handleUpdate(skill.id)" :disabled="loading"
+                    <button class="btn-icon-sm primary" @click.stop="handleUpdate(skill.id)" :disabled="loading"
                       title="同步源码更新">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
@@ -952,13 +953,13 @@ const confirmImport = async () => {
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                       </svg>
                     </button>
-                    <button class="btn-icon-sm" @click="openDistribute(skill)" :disabled="loading" title="分发到其他 Agent">
+                    <button class="btn-icon-sm" @click.stop="openDistribute(skill)" :disabled="loading" title="分发到其他 Agent">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
                         <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                       </svg>
                     </button>
-                    <button class="btn-icon-sm danger" @click="handleDelete(skill.id)" :disabled="loading" title="移除技能">
+                    <button class="btn-icon-sm danger" @click.stop="handleDelete(skill.id)" :disabled="loading" title="移除技能">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"></polyline>
