@@ -15,6 +15,7 @@ const REGISTRY_FILE = path.join(SKILLS_DIR, 'registry.json');
 const OLD_SKILLS_DIR = path.join(userHome, '.gemini', 'antigravity', 'skills');
 const OLD_REGISTRY_FILE = path.join(OLD_SKILLS_DIR, 'registry.json');
 let MEM_REGISTRY = null; // 内存缓存
+let CACHED_SKILLS = null; // 缓存的完整技能列表
 
 // 单例模式获取注册表内容 (带写缓冲/内存同步)
 async function getRawRegistry() {
@@ -115,7 +116,7 @@ async function migrateLegacyData() {
     if (!(await fileExists(REGISTRY_FILE))) {
       await fs.promises.copyFile(OLD_REGISTRY_FILE, REGISTRY_FILE);
     }
-    
+
     // 只有在目的地文件确认存在的情况下，才删除旧源文件，确保不丢失原始数据
     if (await fileExists(REGISTRY_FILE)) {
       await fs.promises.unlink(OLD_REGISTRY_FILE);
@@ -177,6 +178,7 @@ async function extractDescription(skillPath) {
       try {
         for await (const line of rl) {
           lineCount++;
+          if (lineCount > 500) break; // 防止处理超大 MD 文件导致挂起
 
           if (lineCount === 1 && line.match(/^---\s*$/)) {
             inFrontmatter = true;
@@ -262,6 +264,10 @@ async function extractDescription(skillPath) {
 
 // ========== 获取已安装列表 (异步优化与内存加速版) ==========
 async function getSkillsList() {
+  if (CACHED_SKILLS) {
+    return CACHED_SKILLS;
+  }
+
   const registry = await getRawRegistry();
   const actualSkills = [];
   const fileExistsAsync = async (p) => fs.promises.access(p).then(() => true).catch(() => false);
@@ -380,6 +386,8 @@ async function getSkillsList() {
   const scannedResults = await Promise.all(scanPromises);
   scannedResults.forEach(res => actualSkills.push(...res));
 
+  CACHED_SKILLS = actualSkills;
+
   return actualSkills;
 }
 
@@ -451,8 +459,16 @@ function gitCloneWithFallback(gitUrl, cloneDir, onProgress) {
             tryClone();
           } else {
             const detail = errData.trim().replace(/[\r\n]+/g, ' ').substring(0, 300);
-            const hint = "\n提示：所有线路均不可达。如果您在中国大陆，请尝试在命令行配置 Git 代理：\ngit config --global http.proxy http://127.0.0.1:您的代理端口";
-            reject(new Error(`克隆失败。${hint}\n详情：${detail || '网络连接超时'}`));
+            const proxyHint = `
+--------------------------------------------------
+💡 提示：所有同步线路均已失败。
+如果尝试多次依然不通，请检查网络或配置 Git 代理：
+1. 请确保您的代理软件（如 Clash/V2Ray）已开启
+2. 在命令行中运行以下指令设置代理（假设端口为 7890）：
+   git config --global http.proxy http://127.0.0.1:7890
+3. 检查 GitHub 官网是否能正常访问
+--------------------------------------------------`;
+            reject(new Error(`克隆失败。${proxyHint}\n\n技术详情：${detail || '连接超时'}`));
           }
         }
       });
@@ -490,7 +506,7 @@ function previewSkills(repoUrl, onProgress) {
   ensureRegistry();
   const os = require('os');
   const { gitUrl, subPath } = parseGitHubUrl(repoUrl);
-  const tempDir = path.join(os.tmpdir(), `ai_skills_preview_${Date.now()}`);
+  const tempDir = path.join(os.tmpdir(), `ai_skills_preview_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
 
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
@@ -537,7 +553,8 @@ function previewSkills(repoUrl, onProgress) {
     // 3. 递归深度搜索
     if (skills.length === 0) {
       if (onProgress) onProgress({ type: 'info', text: `[搜索] 标准结构未匹配，启动深度检索...\n` });
-      function recursiveSearch(dir, relPath) {
+      function recursiveSearch(dir, relPath, depth = 0) {
+        if (depth > 10) return; // 限制搜索深度，防止超大仓库导致挂起
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory()) {
@@ -548,7 +565,7 @@ function previewSkills(repoUrl, onProgress) {
             if (fs.existsSync(path.join(full, 'SKILL.md')) || fs.existsSync(path.join(full, 'skill.md'))) {
               skills.push({ name: entry.name, path: currentRel });
             } else {
-              recursiveSearch(full, currentRel);
+              recursiveSearch(full, currentRel, depth + 1);
             }
           }
         }
@@ -562,13 +579,15 @@ function previewSkills(repoUrl, onProgress) {
     }
 
     // 4. 为发现的每个技能补充描述
-    skills = skills.map(s => {
+    return Promise.all(skills.map(async (s) => {
       const sp = s.path === '.' ? cloneDir : path.join(cloneDir, ...s.path.split('/'));
-      return { ...s, description: extractDescription(sp) };
+      const description = await extractDescription(sp);
+      return { ...s, description };
+    })).then(resolvedSkills => {
+      skills = resolvedSkills;
+      if (onProgress) onProgress({ type: 'info', text: `[成功] 发现 ${skills.length} 个技能: ${skills.map(s => s.name).join(', ')}\n` });
+      return { tempDir, cloneDir, skills, gitUrl };
     });
-
-    if (onProgress) onProgress({ type: 'info', text: `[成功] 发现 ${skills.length} 个技能: ${skills.map(s => s.name).join(', ')}\n` });
-    return { tempDir, cloneDir, skills, gitUrl };
   }).catch((err) => {
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     throw err;
@@ -619,6 +638,8 @@ function installFromPreview(previewData, selectedSkillNames, targetPaths, repoUr
 
         if (onProgress) onProgress({ type: 'info', text: `✓ 已安装 [${skill.name}] 到 ${baseDir}\n` });
 
+        CACHED_SKILLS = null; // 废弃缓存
+
         // 更新注册表
         try {
           let currentReg = [];
@@ -647,10 +668,18 @@ function installFromPreview(previewData, selectedSkillNames, targetPaths, repoUr
       }
     }
 
-    if (!keepTemp && tempDir) fs.rm(tempDir, { recursive: true, force: true }, () => { });
+    if (!keepTemp && tempDir) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) { }
+    }
     return true;
   } catch (err) {
-    if (!keepTemp && tempDir) fs.rm(tempDir, { recursive: true, force: true }, () => { });
+    if (!keepTemp && tempDir) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) { }
+    }
     throw err;
   }
 }
@@ -676,6 +705,7 @@ async function uninstallSkill(skillId) {
     await saveRegistry(registry.filter(s => s.id !== skillId));
   } catch (e) { }
 
+  CACHED_SKILLS = null; // 废弃缓存
   return true;
 }
 
@@ -847,12 +877,12 @@ function openUrl(url) {
   const platform = process.platform;
 
   try {
+    // 统一的安全过滤：仅允许合规的 http/https URL
+    if (!/^https?:\/\/[^\s"&|^<>]+$/.test(url)) return;
+
     if (platform === 'win32') {
-      // 安全过滤：仅允许合规的 http/https URL
-      if (/^https?:\/\/[^\s"&|^<>]+$/.test(url)) {
-        // 使用 explorer 彻底避免 cmd /c 执行带来的命令注入和转义问题
-        spawn('explorer', [url], { detached: true, stdio: 'ignore' }).unref();
-      }
+      // 使用 explorer 彻底避免 cmd /c 执行带来的命令注入和转义问题
+      spawn('explorer', [url], { detached: true, stdio: 'ignore' }).unref();
     } else if (platform === 'darwin') {
       spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
     } else {
@@ -980,12 +1010,13 @@ function saveFileDialog(content, targetPath) {
 
   // 如果不是绝对路径，则当作文件名并拼接到 Desktop
   if (!path.isAbsolute(targetPath)) {
-    filePath = path.join(home, 'Desktop', targetPath);
+    const safeName = path.basename(targetPath);
+    filePath = path.join(home, 'Desktop', safeName);
     if (!fs.existsSync(path.dirname(filePath))) {
-      filePath = path.join(home, targetPath);
+      filePath = path.join(home, safeName);
     }
     if (!fs.existsSync(path.dirname(filePath))) {
-      filePath = path.join(SKILLS_DIR, targetPath);
+      filePath = path.join(SKILLS_DIR, safeName);
     }
   }
 
@@ -1020,34 +1051,32 @@ function saveFileDialog(content, targetPath) {
 }
 
 // 选择保存路径
-function selectSavePath(defaultName = 'skills-hub-backup.json') {
+function selectSavePath(defaultName = 'ai-skills-manager-backup.json') {
   return new Promise((resolve) => {
-    const { exec } = require('child_process');
     const platform = process.platform;
     const os = require('os');
     const home = os.homedir();
 
     if (platform === 'win32') {
+      const { spawn } = require('child_process');
       const escapedName = defaultName.replace(/'/g, "''");
       const psCommand = `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.SaveFileDialog; $f.FileName = '${escapedName}'; $f.Filter = 'JSON Files (*.json)|*.json|All Files (*.*)|*.*'; $f.Title = '选择导出位置'; if($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $f.FileName }`;
-      exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, { encoding: 'utf-8' }, (error, stdout) => {
-        if (error) {
-          resolve(null);
-        } else {
-          const result = stdout ? stdout.trim() : '';
-          resolve(result || null);
-        }
+
+      const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], { encoding: 'utf-8' });
+      let output = '';
+      child.stdout.on('data', (data) => { output += data.toString(); });
+      child.on('close', () => {
+        resolve(output ? output.trim() : null);
       });
       return;
     } else if (platform === 'darwin') {
-      const appleScript = `osascript -e 'POSIX path of (choose file name with prompt "选择导出位置" default name "${defaultName}")'`;
-      exec(appleScript, { encoding: 'utf-8' }, (error, stdout) => {
-        if (error) {
-          resolve(null);
-        } else {
-          const result = stdout ? stdout.trim() : '';
-          resolve(result || null);
-        }
+      const { spawn } = require('child_process');
+      const script = `POSIX path of (choose file name with prompt "选择导出位置" default name "${defaultName.replace(/"/g, '\\"')}")`;
+      const child = spawn('osascript', ['-e', script], { encoding: 'utf-8' });
+      let output = '';
+      child.stdout.on('data', (data) => { output += data.toString(); });
+      child.on('close', () => {
+        resolve(output ? output.trim() : null);
       });
       return;
     }
@@ -1098,6 +1127,7 @@ async function distributeSkill(skillId, targetAgents) {
       }
     } catch (e) { }
   }
+  CACHED_SKILLS = null; // 废弃缓存
   return true;
 }
 
@@ -1108,6 +1138,10 @@ window.preloadAPI = {
   getSkillsList, getSupportedAgents, previewSkills, installFromPreview, distributeSkill, cancelPreview,
   openLocalPath, openUrl, selectSavePath, uninstallSkill, updateSkill, batchUpdateSkills, batchDeleteSkills,
   exportSkillsConfig, importSkillsConfig, saveFileDialog, migrateLegacyData,
-  refreshRegistry: async () => { ensureRegistry(); return await getSkillsList(); }
+  refreshRegistry: async () => {
+    CACHED_SKILLS = null;
+    ensureRegistry();
+    return await getSkillsList();
+  }
 };
 

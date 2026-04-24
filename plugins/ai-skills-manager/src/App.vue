@@ -263,7 +263,7 @@ const handleInstall = async () => {
       selectedSkillNames.value = data.skills.map(s => s.name)
       showInstallPrompt.value = true
     }
-  } catch (e: any) { alert("预览失败：" + e.message) }
+  } catch (e: any) { alert("预览失败：" + (e?.message || String(e))) }
   finally { previewLoading.value = false }
 }
 
@@ -336,7 +336,7 @@ const batchUpdateGroup = async (group: SkillGroup) => {
       else alert(summary)
       await loadSkills()
     }
-  } catch (e: any) { alert('更新异常: ' + e.message) }
+  } catch (e: any) { alert('更新异常: ' + (e?.message || String(e))) }
   finally { loading.value = false; batchProcessing.value = false }
 }
 
@@ -353,7 +353,7 @@ const batchDeleteGroup = async (group: SkillGroup) => {
       else alert(summary)
       await loadSkills()
     }
-  } catch (e: any) { alert('卸载异常: ' + e.message) }
+  } catch (e: any) { alert('卸载异常: ' + (e?.message || String(e))) }
   finally { loading.value = false }
 }
 
@@ -373,7 +373,7 @@ const confirmInstall = async () => {
       if (window.ztools) window.ztools.showNotification('安装与分发成功')
       await loadSkills()
     }
-  } catch (e: any) { alert("安装失败：" + e.message) }
+  } catch (e: any) { alert("安装失败：" + (e?.message || String(e))) }
   finally { loading.value = false; installUrl.value = ''; previewData.value = null }
 }
 
@@ -410,7 +410,7 @@ const confirmDistribute = async () => {
       batchSelected.value = []
       await loadSkills()
     }
-  } catch (e: any) { alert('同步失败: ' + e.message) }
+  } catch (e: any) { alert('同步失败: ' + (e?.message || String(e))) }
   finally { loading.value = false }
 }
 
@@ -420,8 +420,8 @@ const refreshAll = async () => {
     await loadSkills()
     if (window.preloadAPI && window.ztools) window.ztools.showNotification('审计完成：已同步全机技能状态')
   } catch (e: any) {
-    if (window.ztools) window.ztools.showNotification('刷新失败: ' + e.message)
-    else alert('刷新失败: ' + e.message)
+    if (window.ztools) window.ztools.showNotification('刷新失败: ' + (e?.message || String(e)))
+    else alert('刷新失败: ' + (e?.message || String(e)))
   } finally {
     loading.value = false
   }
@@ -445,7 +445,7 @@ const handleUpdate = async (id: string) => {
       if (window.ztools) window.ztools.showNotification('更新成功')
       await loadSkills()
     }
-  } catch (e: any) { alert("更新失败: " + e.message) }
+  } catch (e: any) { alert("更新失败: " + (e?.message || String(e))) }
   finally { loading.value = false }
 }
 
@@ -453,7 +453,7 @@ const handleDelete = async (id: string) => {
   if (confirm("是否确认删除该技能？")) {
     loading.value = true
     try { if (window.preloadAPI) { await window.preloadAPI.uninstallSkill(id); if (window.ztools) window.ztools.showNotification('删除成功'); await loadSkills() } }
-    catch (e: any) { alert("删除失败：" + e.message) }
+    catch (e: any) { alert("删除失败：" + (e?.message || String(e))) }
     finally { loading.value = false }
   }
 }
@@ -500,7 +500,7 @@ const batchUpdate = async () => {
       else alert(summary)
       await loadSkills()
     }
-  } catch (e: any) { alert('批量更新异常: ' + e.message) }
+  } catch (e: any) { alert('批量更新异常: ' + (e?.message || String(e))) }
   finally { loading.value = false; batchProcessing.value = false }
 }
 
@@ -518,7 +518,7 @@ const batchDelete = async () => {
       await loadSkills()
       batchSelected.value = []
     }
-  } catch (e: any) { alert('批量卸载异常: ' + e.message) }
+  } catch (e: any) { alert('批量卸载异常: ' + (e?.message || String(e))) }
   finally { loading.value = false }
 }
 
@@ -530,15 +530,15 @@ const handleExport = async () => {
   loading.value = true
   progressLogs.value = ['正在调起系统文件对话框...']
   try {
-    const path = await window.preloadAPI.selectSavePath('skills-hub-backup.json')
+    const path = await window.preloadAPI.selectSavePath('ai-skills-manager-backup.json')
     if (path) {
       progressLogs.value.push('正在打包配置数据...')
       const configJson = await window.preloadAPI.exportSkillsConfig()
       const savedPath = window.preloadAPI.saveFileDialog(configJson, path)
       if (window.ztools) window.ztools.showNotification('配置已导出到: ' + savedPath)
     }
-  } catch (e: any) { 
-    alert('导出失败: ' + e.message) 
+  } catch (e: any) {
+    alert('导出失败: ' + (e?.message || String(e)))
   } finally {
     loading.value = false
   }
@@ -573,7 +573,7 @@ const confirmImport = async () => {
       else alert(summary)
       await loadSkills()
     }
-  } catch (e: any) { alert('导入失败: ' + e.message) }
+  } catch (e: any) { alert('导入失败: ' + (e?.message || String(e))) }
   finally { loading.value = false; importConfigText.value = '' }
 }
 </script>
@@ -717,8 +717,7 @@ const confirmImport = async () => {
                 :class="{ active: selectedAgent === agentId }" @click="selectedAgent = agentId">
                 {{ agentId === 'all' ? '全部项目' : getAgentNameById(agentId) }}
                 <span class="count-badge" v-if="selectedAgent === agentId || agentId === 'all'">
-                  {{agentId === 'all' ? skills.length : skills.filter(s => getAgentIdByPath(s.localPath) ===
-                  agentId).length }}
+                  {{agentId === 'all' ? skills.length : skills.filter(s => s._agentId === agentId).length}}
                 </span>
               </button>
             </div>
@@ -777,7 +776,7 @@ const confirmImport = async () => {
               <div class="card-title-row">
                 <h3 :title="skill.name">{{ skill.name }}</h3>
                 <div class="badge-row">
-                  <span class="badge-tag">{{ getPathAlias(skill.localPath) }}</span>
+                  <span class="badge-tag">{{ skill._agentAlias || '未知' }}</span>
                   <button class="btn-icon-link" @click.stop="openLocalPath(skill.localPath)" title="打开本地目录">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -928,9 +927,9 @@ const confirmImport = async () => {
                     <div class="child-info">
                       <strong>{{ skill.name }}</strong>
                       <p v-if="skill.description" class="skill-desc-sm" :title="skill.description">{{ skill.description
-                        }}</p>
+                      }}</p>
                       <span class="child-badges">
-                        <span class="badge-tag small">{{ getPathAlias(skill.localPath) }}</span>
+                        <span class="badge-tag small">{{ skill._agentAlias || '未知' }}</span>
                       </span>
                     </div>
                   </div>

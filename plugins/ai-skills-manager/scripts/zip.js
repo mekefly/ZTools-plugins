@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 
-const output = fs.createWriteStream(path.join(process.cwd(), 'ai-skills-manager.zip'));
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const output = fs.createWriteStream(path.join(__dirname, '..', 'ai-skills-manager.zip'));
 const archive = archiver('zip', {
   zlib: { level: 9 } // Sets the compression level.
 });
