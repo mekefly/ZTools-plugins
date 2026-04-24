@@ -38,7 +38,8 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
   function writeExpandedInsert(stmt) {
     forEachTupleInInsert(stmt.trimEnd(), (singleInsert) => {
       // 把多行 INSERT 展开后的单条语句内部换行替换为空格，确保 processLine 收到单行字符串
-      const oneLiner = singleInsert.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
+      // 只替换换行符为空格，不做 \s+ 折叠（避免破坏字符串字面量内的多空格）
+      const oneLiner = singleInsert.replace(/\r?\n/g, ' ').trim()
       writer.write(processLine(oneLiner, ctx) + '\n')
     })
   }

@@ -52,9 +52,10 @@ function splitStatements(sql) {
         break
 
       case 'string':
-        if (ch === "'" && sql[i + 1] === "'") {
-          // '' 转义，不是字符串结束
-          i += 2
+        if (ch === '\\') {
+          i += 2                                    // 反斜杠转义（MySQL）
+        } else if (ch === "'" && sql[i + 1] === "'") {
+          i += 2                                    // '' 转义（标准 SQL）
         } else if (ch === "'") {
           state = 'normal'
           i++

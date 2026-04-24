@@ -8,6 +8,7 @@ const fs   = require('node:fs')
 const path = require('node:path')
 const XLSX = require('../vendor/xlsx')
 const { splitStatements } = require('./segment')
+const { splitColumnList } = require('./dedupe')
 
 // ─── SQL → 结构化行数据 ───────────────────────────────────────────────────────
 
@@ -21,7 +22,8 @@ function normalizeTableName(raw) {
 }
 
 function parseColumns(colStr) {
-  return colStr.slice(1, -1).split(',').map((c) => c.trim().replace(/`/g, ''))
+  // 去掉外层括号，用 splitColumnList 安全分割（处理反引号内逗号）
+  return splitColumnList(colStr.slice(1, -1))
 }
 
 function parseSqlValue(raw) {
@@ -483,15 +485,37 @@ async function sqlToCsvStream(inputPath, outputPath, options = {}) {
     }
   }
 
+  // 跨行状态机：正确识别语句结束，不被字符串/注释内分号误触发
+  let scanState = 'normal' // 'normal' | 'string' | 'line_comment' | 'block_comment'
+
   for await (const line of rl) {
     bytesRead += Buffer.byteLength(line, 'utf8') + 1
     const pct = Math.min(99, Math.floor((bytesRead / totalBytes) * 100))
 
-    stmtBuf += line.replace(/\r$/, '') + '\n'
-    if (line.trimEnd().endsWith(';')) {
-      flushStatement(stmtBuf.trim())
-      stmtBuf = ''
+    const rawLine = line.replace(/\r$/, '')
+    for (let ci = 0; ci < rawLine.length; ci++) {
+      const ch = rawLine[ci]
+      stmtBuf += ch
+      switch (scanState) {
+        case 'normal':
+          if (ch === "'") scanState = 'string'
+          else if (ch === '-' && rawLine[ci + 1] === '-') scanState = 'line_comment'
+          else if (ch === '/' && rawLine[ci + 1] === '*') scanState = 'block_comment'
+          else if (ch === ';') { flushStatement(stmtBuf.trim()); stmtBuf = '' }
+          break
+        case 'string':
+          if (ch === '\\') { ci++; stmtBuf += rawLine[ci] ?? '' }
+          else if (ch === "'" && rawLine[ci + 1] === "'") { ci++; stmtBuf += "'" }
+          else if (ch === "'") scanState = 'normal'
+          break
+        case 'line_comment': break
+        case 'block_comment':
+          if (ch === '*' && rawLine[ci + 1] === '/') { ci++; stmtBuf += '/'; scanState = 'normal' }
+          break
+      }
     }
+    if (scanState === 'line_comment') scanState = 'normal'
+    stmtBuf += '\n'
 
     if (onProgress) {
       const now = Date.now()

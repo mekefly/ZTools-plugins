@@ -41,8 +41,12 @@ async function segmentFileStream(inputPath, outputDir, options = {}) {
   // 状态：'normal' | 'string' | 'line_comment' | 'block_comment'
   let state = 'normal'
 
+  const closedWriters = [] // 收集已关闭的 writer，最后统一 await 确保全部刷盘
   function openNextFile() {
-    if (currentWriter) currentWriter.end()
+    if (currentWriter) {
+      const w = currentWriter
+      closedWriters.push(new Promise((resolve, reject) => w.end((err) => (err ? reject(err) : resolve()))))
+    }
     const name = fileName(fileIndex++)
     fileNames.push(name)
     currentWriter = fs.createWriteStream(path.join(outputDir, name), { encoding: 'utf8' })
@@ -104,9 +108,11 @@ async function segmentFileStream(inputPath, outputDir, options = {}) {
           break
 
         case 'string':
-          if (ch === "'" && line[i + 1] === "'") {
-            // '' 转义
-            stmtBuf += "''"
+          if (ch === '\\') {
+            stmtBuf += ch + (line[i + 1] ?? '')     // 反斜杠转义（MySQL）
+            i += 2
+          } else if (ch === "'" && line[i + 1] === "'") {
+            stmtBuf += "''"                          // '' 转义（标准 SQL）
             i += 2
           } else if (ch === "'") {
             state = 'normal'
@@ -158,6 +164,8 @@ async function segmentFileStream(inputPath, outputDir, options = {}) {
   if (currentWriter) {
     await new Promise((resolve, reject) => currentWriter.end((err) => (err ? reject(err) : resolve())))
   }
+  // 确保所有已滚动的旧 writer 也完成刷盘
+  await Promise.all(closedWriters)
 
   if (onProgress) onProgress(100)
   return { fileCount: fileNames.length, fileNames }

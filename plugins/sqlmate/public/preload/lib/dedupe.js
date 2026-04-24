@@ -3,6 +3,27 @@
 
 const { splitStatements } = require('./segment')
 
+/**
+ * 按逗号分割列名列表，正确跳过反引号内的逗号（如 `col,name`）
+ * @param {string} colStr  括号内的列名字符串，如 `id`, `name`, `col,x`
+ * @returns {string[]}
+ */
+function splitColumnList(colStr) {
+  const cols = []
+  let i = 0, start = 0, inBacktick = false
+  while (i < colStr.length) {
+    const ch = colStr[i]
+    if (ch === '\x60') { inBacktick = !inBacktick; i++; continue }
+    if (ch === ',' && !inBacktick) {
+      cols.push(colStr.slice(start, i).trim().replace(/^`|`$/g, ''))
+      start = i + 1
+    }
+    i++
+  }
+  cols.push(colStr.slice(start).trim().replace(/^`|`$/g, ''))
+  return cols
+}
+
 function parseSqlValues(valStr) {
   const tokens = []
   let i = 0
@@ -124,7 +145,8 @@ function parseInsertLine(line) {
   const tableName = m[1]
   let columns = null
   if (m[2] !== undefined && m[2].trim() !== '') {
-    columns = m[2].split(',').map((c) => c.trim().replace(/^`|`$/g, ''))
+    // 按逗号分割列名，正确跳过反引号内的逗号（如 `col,name`）
+    columns = splitColumnList(m[2])
   }
 
   // m[0] 末尾即是 '('，精确定位，无需二次搜索
@@ -220,4 +242,4 @@ function quoteTableName(raw) {
     .join('.')
 }
 
-module.exports = { parseSqlValues, splitMultiRowInsert, forEachTupleInInsert, parseInsertLine, dedupeSql, quoteTableName }
+module.exports = { parseSqlValues, splitColumnList, splitMultiRowInsert, forEachTupleInInsert, parseInsertLine, dedupeSql, quoteTableName }

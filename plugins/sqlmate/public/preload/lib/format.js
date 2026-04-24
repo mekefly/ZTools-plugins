@@ -219,17 +219,23 @@ function fmtStmt(tokens, indent, kc) {
 function compressSQL(sql, options) {
   const { removeComments = true } = options || {}
   const tokens = tokenize(sql)
-  const parts = []
-  for (const t of tokens) {
+  // 逐 token 构建，仅在非字符串 token 间加单空格，字符串原样保留
+  let result = ''
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]
     if (removeComments && (t.type === 'comment_line' || t.type === 'comment_block')) continue
-    if (t.type === 'operator' && t.value === '.') { if (parts.length) parts[parts.length-1] = parts[parts.length-1].trimEnd(); parts.push('.'); continue }
-    if (t.type === 'comma') { if (parts.length) parts[parts.length-1] = parts[parts.length-1].trimEnd(); parts.push(', '); continue }
-    if (t.type === 'paren_open') { if (parts.length) parts[parts.length-1] = parts[parts.length-1].trimEnd(); parts.push('('); continue }
-    if (t.type === 'paren_close') { if (parts.length) parts[parts.length-1] = parts[parts.length-1].trimEnd(); parts.push(') '); continue }
-    if (t.type === 'semicolon') { if (parts.length) parts[parts.length-1] = parts[parts.length-1].trimEnd(); parts.push('; '); continue }
-    parts.push(t.value + ' ')
+
+    const needSpace = result.length > 0 && !/[.(]$/.test(result) && t.type !== 'paren_close' && t.type !== 'comma' && t.type !== 'semicolon' && t.value !== '.'
+    if (t.type === 'operator' && t.value === '.') { result = result.trimEnd() + '.'; continue }
+    if (t.type === 'comma') { result = result.trimEnd() + ', '; continue }
+    if (t.type === 'paren_open') { result = result.trimEnd() + '('; continue }
+    if (t.type === 'paren_close') { result = result.trimEnd() + ') '; continue }
+    if (t.type === 'semicolon') { result = result.trimEnd() + '; '; continue }
+    // 字符串 token 原样拼接，不做任何空格折叠
+    if (needSpace) result += ' '
+    result += t.value
   }
-  return parts.join('').trim().replace(/\s{2,}/g, ' ')
+  return result.trim()
 }
 
 module.exports = { formatSQL, compressSQL }

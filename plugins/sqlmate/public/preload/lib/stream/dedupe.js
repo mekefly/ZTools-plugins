@@ -29,7 +29,7 @@ async function dedupeFileStream(inputPath, outputPath, options = {}) {
   const inputSize = fs.statSync(inputPath).size
 
   // ── 第一遍：展开多行 INSERT，写临时文件，同时建 key→lineNo 索引 ──────────
-  const tmpPath = path.join(os.tmpdir(), `sqlmate_dedupe_${Date.now()}.tmp`)
+  const tmpPath = path.join(os.tmpdir(), `sqlmate_dedupe_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`)
 
   // keyToIndex: key string → line number
   // 内存占用 = O(唯一键数)，每条约 ~100 bytes（key 字符串 + number）。

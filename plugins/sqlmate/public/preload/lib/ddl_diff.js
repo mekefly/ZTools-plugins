@@ -11,10 +11,18 @@ function normaliseIdent(raw) {
 
 function splitCreateTableBody(body) {
   const items = []
-  let depth = 0
+  let depth = 0, inStr = false
   let current = ''
   for (let i = 0; i < body.length; i++) {
     const ch = body[i]
+    if (inStr) {
+      current += ch
+      if (ch === '\\') { current += body[i + 1] ?? ''; i++; continue }   // 反斜杠转义
+      if (ch === "'" && body[i + 1] === "'") { current += "'"; i++; continue } // '' 转义
+      if (ch === "'") inStr = false
+      continue
+    }
+    if (ch === "'") { inStr = true; current += ch; continue }
     if (ch === '(') { depth++; current += ch }
     else if (ch === ')') { depth--; current += ch }
     else if (ch === ',' && depth === 0) {
@@ -105,9 +113,27 @@ function parseDDL(sql) {
   return { tableName, rawTableName, columns, indexes }
 }
 
+/**
+ * 标准化列定义用于对比：空白折叠 + 非字符串部分大写。
+ * 字符串字面量内容保持原样（不做 toUpperCase）。
+ */
 function normaliseFullDef(def) {
-  return def.replace(/\s+/g, ' ').trim().toUpperCase()
-    .replace(/DEFAULT\s+'([^']*)'/g, "DEFAULT '$1'")
+  const normalised = def.replace(/\s+/g, ' ').trim()
+  // 逐段处理：字符串外的部分大写，字符串内原样保留
+  let result = '', inStr = false
+  for (let i = 0; i < normalised.length; i++) {
+    const ch = normalised[i]
+    if (inStr) {
+      if (ch === '\\') { result += ch + (normalised[i + 1] ?? ''); i++; continue }
+      if (ch === "'" && normalised[i + 1] === "'") { result += "''"; i++; continue }
+      if (ch === "'") { inStr = false; result += ch; continue }
+      result += ch
+    } else {
+      if (ch === "'") { inStr = true; result += ch; continue }
+      result += ch.toUpperCase()
+    }
+  }
+  return result
 }
 
 function indexDefsEqual(a, b) {
