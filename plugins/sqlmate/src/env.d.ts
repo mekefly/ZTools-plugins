@@ -111,6 +111,18 @@ declare global {
     writeFile(filePath: string, content: string): void
     writeFiles(dir: string, files: { name: string; content: string }[]): void
 
+    // SQL 格式化 & 压缩
+    formatSql(
+      inputSql: string,
+      outputPath?: string | null,
+      options?: { indent?: string; keywordCase?: 'upper' | 'lower' | 'preserve'; linesBetweenStatements?: number; onProgress?: (pct: number) => void }
+    ): Promise<{ sql?: string }>
+    compressSql(
+      inputSql: string,
+      outputPath?: string | null,
+      options?: { removeComments?: boolean; onProgress?: (pct: number) => void }
+    ): Promise<{ sql?: string }>
+
     // 合并
     merge(
       inputSql: string,

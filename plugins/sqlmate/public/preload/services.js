@@ -11,6 +11,7 @@ const readline = require('node:readline')
 const { sqlToCsv, sqlToCsvStream, sqlToXlsx, csvToSql, xlsxToSql } = require('./lib/convert')
 
 // ── 小文件纯函数库 ────────────────────────────────────────────────────────────
+const { formatSQL, compressSQL } = require('./lib/format')
 const { mergeSQL }          = require('./lib/merge')
 const { splitSQL }          = require('./lib/split')
 const { segmentSQL }        = require('./lib/segment')
@@ -402,6 +403,158 @@ window.services = {
       ? generateAlterSql(diff, dialect, dstDef.rawTableName)
       : ''
     return { diff, alterSql }
+  },
+
+  // ── SQL 格式化 & 压缩 ────────────────────────────────────────────────────────
+
+  /**
+   * 格式化 SQL（美化/缩进）
+   * 小文件：返回 { sql }；大文件：流式逐语句读取 → 格式化 → 写出
+   *
+   * @param {string} inputSql      SQL 字符串 或 文件路径
+   * @param {string} [outputPath]  输出文件路径（大文件必填）
+   * @param {{ indent?: string, keywordCase?: 'upper'|'lower'|'preserve',
+   *           linesBetweenStatements?: number, onProgress?: (pct: number) => void }} [options]
+   * @returns {Promise<{ sql?: string }>}
+   */
+  async formatSql(inputSql, outputPath, options = {}) {
+    const { onProgress, ...fmtOptions } = options
+
+    if (isLargeFile(inputSql)) {
+      // 大文件：逐语句流式格式化
+      const inputSize = fs.statSync(inputSql).size
+      let bytesRead = 0, lastPct = 0, stmtBuf = '', state = 'normal'
+      const writer = fs.createWriteStream(outputPath, { encoding: 'utf8' })
+      let firstStmt = true
+      const gap = '\n'.repeat((fmtOptions.linesBetweenStatements ?? 1) + 1)
+
+      const rl = readline.createInterface({
+        input: fs.createReadStream(inputSql, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+      })
+
+      for await (const rawLine of rl) {
+        bytesRead += Buffer.byteLength(rawLine, 'utf8') + 1
+        const pct = Math.min(99, Math.floor((bytesRead / inputSize) * 100))
+        if (onProgress && pct > lastPct) { onProgress(pct); lastPct = pct }
+
+        const line = rawLine.replace(/\r$/, '')
+        // 用状态机逐字符扫描检测语句结束
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci]
+          stmtBuf += ch
+          switch (state) {
+            case 'normal':
+              if (ch === "'") state = 'string'
+              else if (ch === '-' && line[ci + 1] === '-') state = 'line_comment'
+              else if (ch === '/' && line[ci + 1] === '*') state = 'block_comment'
+              else if (ch === ';') {
+                // 语句结束：格式化并写出
+                const formatted = formatSQL(stmtBuf.trim(), fmtOptions)
+                if (!firstStmt) writer.write(gap)
+                writer.write(formatted + '\n')
+                firstStmt = false
+                stmtBuf = ''
+                state = 'normal'
+              }
+              break
+            case 'string':
+              if (ch === '\\') { ci++; stmtBuf += line[ci] ?? '' }
+              else if (ch === "'" && line[ci + 1] === "'") { ci++; stmtBuf += "'" }
+              else if (ch === "'") state = 'normal'
+              break
+            case 'line_comment': break
+            case 'block_comment':
+              if (ch === '*' && line[ci + 1] === '/') { ci++; stmtBuf += '/'; state = 'normal' }
+              break
+          }
+        }
+        if (state === 'line_comment') state = 'normal'
+        stmtBuf += '\n'
+      }
+      // 末尾无分号的残余
+      if (stmtBuf.trim()) {
+        const formatted = formatSQL(stmtBuf.trim(), fmtOptions)
+        if (!firstStmt) writer.write(gap)
+        writer.write(formatted + '\n')
+      }
+
+      await new Promise((resolve, reject) => writer.end((err) => (err ? reject(err) : resolve())))
+      if (onProgress) onProgress(100)
+      return {}
+    }
+
+    // 小文件 / 文本输入
+    const sql = fs.existsSync(inputSql) ? fs.readFileSync(inputSql, 'utf-8') : inputSql
+    return { sql: formatSQL(sql, fmtOptions) }
+  },
+
+  /**
+   * 压缩 SQL（去注释、去多余空白）
+   * 小文件：返回 { sql }；大文件：流式逐行压缩 → 写出
+   *
+   * @param {string} inputSql      SQL 字符串 或 文件路径
+   * @param {string} [outputPath]  输出文件路径（大文件必填）
+   * @param {{ removeComments?: boolean, onProgress?: (pct: number) => void }} [options]
+   * @returns {Promise<{ sql?: string }>}
+   */
+  async compressSql(inputSql, outputPath, options = {}) {
+    const { onProgress, ...cmpOptions } = options
+
+    if (isLargeFile(inputSql)) {
+      // 大文件：逐语句流式压缩
+      const inputSize = fs.statSync(inputSql).size
+      let bytesRead = 0, lastPct = 0, stmtBuf = '', state = 'normal'
+      const writer = fs.createWriteStream(outputPath, { encoding: 'utf8' })
+
+      const rl = readline.createInterface({
+        input: fs.createReadStream(inputSql, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+      })
+
+      for await (const rawLine of rl) {
+        bytesRead += Buffer.byteLength(rawLine, 'utf8') + 1
+        const pct = Math.min(99, Math.floor((bytesRead / inputSize) * 100))
+        if (onProgress && pct > lastPct) { onProgress(pct); lastPct = pct }
+
+        const line = rawLine.replace(/\r$/, '')
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci]
+          stmtBuf += ch
+          switch (state) {
+            case 'normal':
+              if (ch === "'") state = 'string'
+              else if (ch === '-' && line[ci + 1] === '-') state = 'line_comment'
+              else if (ch === '/' && line[ci + 1] === '*') state = 'block_comment'
+              else if (ch === ';') {
+                writer.write(compressSQL(stmtBuf.trim(), cmpOptions) + '\n')
+                stmtBuf = ''
+                state = 'normal'
+              }
+              break
+            case 'string':
+              if (ch === '\\') { ci++; stmtBuf += line[ci] ?? '' }
+              else if (ch === "'" && line[ci + 1] === "'") { ci++; stmtBuf += "'" }
+              else if (ch === "'") state = 'normal'
+              break
+            case 'line_comment': break
+            case 'block_comment':
+              if (ch === '*' && line[ci + 1] === '/') { ci++; stmtBuf += '/'; state = 'normal' }
+              break
+          }
+        }
+        if (state === 'line_comment') state = 'normal'
+        stmtBuf += '\n'
+      }
+      if (stmtBuf.trim()) writer.write(compressSQL(stmtBuf.trim(), cmpOptions) + '\n')
+
+      await new Promise((resolve, reject) => writer.end((err) => (err ? reject(err) : resolve())))
+      if (onProgress) onProgress(100)
+      return {}
+    }
+
+    const sql = fs.existsSync(inputSql) ? fs.readFileSync(inputSql, 'utf-8') : inputSql
+    return { sql: compressSQL(sql, cmpOptions) }
   },
 
   // ── SQL → CSV / xlsx ──────────────────────────────────────────────────────────

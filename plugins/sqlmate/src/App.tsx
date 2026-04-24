@@ -13,6 +13,7 @@ import Diff     from './pages/Diff'
 import DdlDiff  from './pages/DdlDiff'
 import SqlToCsv from './pages/SqlToCsv'
 import CsvToSql from './pages/CsvToSql'
+import Format  from './pages/Format'
 import './App.css'
 
 interface NavItem {
@@ -29,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'stats',     label: '统计',     group: '基础处理' },
   { id: 'sqltoCsv',  label: 'SQL→CSV',  group: '格式转换' },
   { id: 'csvToSql',  label: 'CSV→SQL',  group: '格式转换' },
+  { id: 'format',    label: '格式化',   group: '格式转换' },
   { id: 'dedupe',    label: '去重',     group: '数据治理' },
   { id: 'mask',      label: '脱敏',     group: '数据治理' },
   { id: 'rename',    label: '替换',     group: '数据治理' },
@@ -53,6 +55,7 @@ const PAGES: Record<string, React.ComponentType<{ enterAction: any }>> = {
   ddldiff:  DdlDiff,
   sqltoCsv: SqlToCsv,
   csvToSql: CsvToSql,
+  format:   Format,
 }
 
 const GROUPS = ['基础处理', '格式转换', '数据治理', '对比分析']

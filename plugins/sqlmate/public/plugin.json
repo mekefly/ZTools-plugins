@@ -83,6 +83,13 @@
         { "type": "files", "fileType": "file", "extensions": ["sql"], "label": "语句改写" }]
     },
     {
+      "code": "format",
+      "explain": "SQL 格式化美化 / 压缩为单行",
+      "icon": "logo.png",
+      "cmds": ["SQL格式化", "格式化SQL", "SQL压缩", "压缩SQL", "sqlmate format",
+        { "type": "files", "fileType": "file", "extensions": ["sql", "txt"], "label": "SQL格式化" }]
+    },
+    {
       "code": "sqltoCsv",
       "explain": "SQL INSERT 数据导出为 CSV 或 Excel",
       "icon": "logo.png",
