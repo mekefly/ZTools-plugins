@@ -6,7 +6,7 @@
 
 const fs   = require('node:fs')
 const path = require('node:path')
-const XLSX = require('xlsx')
+const XLSX = require('../vendor/xlsx')
 const { splitStatements } = require('./segment')
 
 // ─── SQL → 结构化行数据 ───────────────────────────────────────────────────────

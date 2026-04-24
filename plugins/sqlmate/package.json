@@ -1,6 +1,6 @@
 {
   "name": "sqlmate",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "强大的SQL工具,包含合并,拆分,转换,DDL对比等等",
   "type": "module",
   "scripts": {

@@ -540,7 +540,7 @@ window.services = {
     if (!onProgress) return xlsxToSql(xlsxPath, convertOptions)
 
     // xlsx 解析同步，用 setTimeout(0) 在分 Sheet 处理间让出事件循环上报进度
-    const XLSX = require('xlsx')
+    const XLSX = require('./vendor/xlsx')
     const wb = XLSX.readFile(xlsxPath)
 
     // 第一遍统计总行数
