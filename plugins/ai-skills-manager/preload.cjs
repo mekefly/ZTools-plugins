@@ -617,21 +617,19 @@ function installFromPreview(previewData, selectedSkillNames, targetPaths, repoUr
       }
     }
 
-    if (!keepTemp && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    if (!keepTemp && tempDir) fs.rm(tempDir, { recursive: true, force: true }, () => {});
     return true;
   } catch (err) {
-    if (!keepTemp && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    if (!keepTemp && tempDir) fs.rm(tempDir, { recursive: true, force: true }, () => {});
     throw err;
   }
 }
 
 // ========== 取消预览，清理临时目录 ==========
 function cancelPreview(tempDir) {
-  try {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  } catch (e) { }
+  if (tempDir) {
+    fs.rm(tempDir, { recursive: true, force: true }, () => {});
+  }
 }
 
 // ========== 删除技能 ==========
@@ -778,6 +776,15 @@ async function batchDeleteSkills(skillIds) {
 // ========== Shell 辅助 ==========
 function openLocalPath(localPath) {
   if (!localPath) return;
+  
+  try {
+    const { shell } = require('electron');
+    if (shell && shell.showItemInFolder) {
+      shell.showItemInFolder(localPath);
+      return;
+    }
+  } catch (e) {}
+
   const { spawn } = require('child_process');
   const platform = process.platform;
 
