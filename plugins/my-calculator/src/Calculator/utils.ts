@@ -37,16 +37,11 @@ function tokenize(expression: string): string[] {
       while (i < expr.length && (/\d/.test(expr[i]) || expr[i] === '.')) {
         if (expr[i] === '.') {
           dotCount++
-          if (dotCount > 1) break // 多个小数点停止
+          if (dotCount > 1) {
+            throw new Error('Invalid number format: multiple decimal points')
+          }
         }
         num += expr[i++]
-      }
-      // 如果有多个小数点，把第二个小数点及后面的留作下一个 token
-      if (dotCount > 1) {
-        // 回退到第一个小数点
-        const lastDotIndex = num.lastIndexOf('.')
-        i -= num.length - lastDotIndex
-        num = num.substring(0, lastDotIndex)
       }
       tokens.push(num)
     }
@@ -186,18 +181,22 @@ export function calculate(expression: string): { result: string; error: boolean 
 
 // 验证表达式是否合法
 export function isValidExpression(expression: string): boolean {
-  const cleaned = expression.replace(/\s+/g, '')
+  // 统一转换 UI 符号
+  const cleaned = expression
+    .replace(/\s+/g, '')
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/٪/g, '%')
+
+  if (!cleaned) return false
 
   // 检查非法连续运算符（允许负号作为一元运算符）
   // 负号可以在开头或运算符后面（如 5*-2, 5+-2）
   if (/[+*/%]{2,}/.test(cleaned)) return false
-  // 不能有连续的两个减号
-  if (/--/.test(cleaned)) return false
 
   // 百分号不能在非法位置：
   // - 开头
   // - 紧跟在 ( + * / 后面（- 允许，因为可能是一元负号）
-  // - )% 模式：百分号紧跟右括号且没有操作数
   if (/^%/.test(cleaned)) return false
   if (/[(*/+]%/.test(cleaned)) return false
 

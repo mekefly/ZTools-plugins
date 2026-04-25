@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react'
-import Hello from './Hello'
-import Read from './Read'
-import Write from './Write'
 import Calculator from './Calculator'
 
 export default function App() {
-  const [enterAction, setEnterAction] = useState<any>({})
+  const [enterAction, setEnterAction] = useState<{ code: string; type: string; payload: unknown; option: unknown }>({ code: '', type: '', payload: undefined, option: undefined })
   const [route, setRoute] = useState('')
 
   useEffect(() => {
@@ -24,9 +21,6 @@ export default function App() {
     })
   }, [])
 
-  if (route === 'hello') return <Hello enterAction={enterAction} />
-  if (route === 'read') return <Read enterAction={enterAction} />
-  if (route === 'write') return <Write enterAction={enterAction} />
   if (route === 'calculator') return <Calculator enterAction={enterAction} />
 
   return null

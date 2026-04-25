@@ -9,7 +9,7 @@ interface HistoryItem {
 }
 
 interface CalculatorProps {
-  enterAction: any
+  enterAction: { code: string; type: string; payload: unknown; option: unknown }
 }
 
 export default function Calculator({ enterAction }: CalculatorProps) {
