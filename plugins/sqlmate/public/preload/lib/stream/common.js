@@ -49,6 +49,7 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
   let state = 'normal'
   let stmtBuf = ''         // 当前正在缓冲的 INSERT 语句
   let bufferingInsert = false
+  let pendingStar = false  // 块注释中 * 在行尾，等下一行的 /
 
   /**
    * 把一行追加到 stmtBuf，逐字符扫描检测语句是否结束（遇到 normal 状态下的 ; ）。
@@ -57,6 +58,15 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
    */
   function appendAndDetectEnd(line) {
     let i = 0
+
+    // 处理跨行的 */ ：上一行末尾是 *，本行开头是 /
+    if (pendingStar && state === 'block_comment') {
+      pendingStar = false
+      if (line.length > 0 && line[0] === '/') {
+        state = 'normal'; stmtBuf += '/'; i = 1
+      }
+    }
+
     while (i < line.length) {
       const ch = line[i]
       switch (state) {
@@ -69,7 +79,6 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
             state = 'block_comment'; stmtBuf += '/*'; i += 2
           } else if (ch === ';') {
             stmtBuf += ch; i++
-            // 分号后追加本行剩余（通常为空），然后退出
             stmtBuf += line.slice(i) + '\n'
             if (state === 'line_comment') state = 'normal'
             return true
@@ -78,9 +87,9 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
           }
           break
         case 'string':
-          if (ch === '\\') {                                     // 反斜杠转义（MySQL）
+          if (ch === '\\') {
             stmtBuf += ch + (line[i + 1] ?? ''); i += 2
-          } else if (ch === "'" && line[i + 1] === "'") {       // '' 转义（标准 SQL）
+          } else if (ch === "'" && line[i + 1] === "'") {
             stmtBuf += "''"; i += 2
           } else if (ch === "'") {
             state = 'normal'; stmtBuf += ch; i++
@@ -94,6 +103,9 @@ async function processFileStream(inputPath, outputPath, processLine, ctx, option
         case 'block_comment':
           if (ch === '*' && line[i + 1] === '/') {
             state = 'normal'; stmtBuf += '*/'; i += 2
+          } else if (ch === '*' && i === line.length - 1) {
+            // * 在行尾，标记等待下一行的 /
+            stmtBuf += ch; i++; pendingStar = true
           } else {
             stmtBuf += ch; i++
           }

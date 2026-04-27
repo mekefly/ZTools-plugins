@@ -62,7 +62,8 @@ function splitTupleTokens(tuple) {
 function processStatement(stmt, tableMap) {
   const match = INSERT_HDR_RE.exec(stmt)
   if (!match) return
-  const tableName = normalizeTableName(match[1])
+  // 保留完整表名（含 schema），避免不同 schema 同名表合并
+  const tableName = match[1].replace(/`/g, '')
   const colStr = match[2] ?? ''
   const valuesOffset = match.index + match[0].length
   const valuesRaw = stmt.slice(valuesOffset).replace(/[;\s]+$/, '').trim()
@@ -239,10 +240,33 @@ function parseCsvRow(row) {
  * @param {{ tableName: string, noHeader?: boolean, batchSize?: number, detectNumeric?: boolean }} options
  * @returns {string}
  */
+/**
+ * 将 CSV 文本按行分割，正确处理双引号字段内的换行符
+ */
+function splitCsvLines(text) {
+  const lines = []
+  let current = '', inQuote = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuote) {
+      if (ch === '"' && text[i + 1] === '"') { current += '""'; i++; continue }
+      if (ch === '"') { inQuote = false; current += ch; continue }
+      current += ch
+    } else {
+      if (ch === '"') { inQuote = true; current += ch; continue }
+      if (ch === '\r' && text[i + 1] === '\n') { lines.push(current); current = ''; i++; continue }
+      if (ch === '\n') { lines.push(current); current = ''; continue }
+      current += ch
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
 function csvToSql(csvText, options) {
   const { tableName, noHeader = false, batchSize = 0, detectNumeric = true } = options
   const text = csvText.replace(/^\uFEFF/, '')
-  const lines = text.split(/\r?\n/)
+  const lines = splitCsvLines(text)
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
 
   const safeTable = tableName.replace(/`/g, '')
@@ -383,8 +407,8 @@ function csvEscapeValue(val) {
 /**
  * 流式 SQL → CSV：readline 逐行读取，每行解析后立即写出，内存 O(1)。
  *
- * 单表：outputPath 为目标文件完整路径（如 /dir/output.csv）
- * 多表：outputPath 为目标目录，每张表直接在该目录下生成 tableName.csv
+ * outputPath 应为目录路径，所有 CSV 文件直接输出到该目录。
+ * 如果误传文件路径（含扩展名），自动取其父目录。
  * 超过 100W 行自动拆分：tableName.csv → tableName_2.csv → ...
  *
  * @param {string} inputPath      SQL 文件路径
@@ -407,12 +431,18 @@ async function sqlToCsvStream(inputPath, outputPath, options = {}) {
   // 收尾时判断是否需要 rename（单表）
   const tableState = new Map()
   const files = []
-  // 先确保 outputPath 的父目录存在（单表时父目录；多表时就是 outputPath 本身）
-  fs.mkdirSync(outputPath, { recursive: true })
+  // outputPath 必须是目录路径（前端通过 showOpenDialog 选目录传入）
+  // 如果路径看起来像文件（有扩展名），取其父目录
+  const outputDir = /\.\w+$/.test(path.basename(outputPath))
+    ? path.dirname(outputPath)
+    : outputPath
+  fs.mkdirSync(outputDir, { recursive: true })
 
   function openWriter(tableName, sheetIndex, columns, outputDir) {
     const suffix = sheetIndex === 1 ? '' : `_${sheetIndex}`
-    const filePath = path.join(outputDir, `${tableName}${suffix}.csv`)
+    // 文件名安全化：schema.table → schema_table，去除文件系统不安全字符
+    const safeName = tableName.replace(/[.\\/:"*?<>|]/g, '_')
+    const filePath = path.join(outputDir, `${safeName}${suffix}.csv`)
     const writer = fs.createWriteStream(filePath, { encoding: 'utf-8' })
     if (columns.length > 0) writer.write(columns.map(csvEscapeValue).join(',') + '\r\n')
     files.push(filePath)
@@ -421,8 +451,7 @@ async function sqlToCsvStream(inputPath, outputPath, options = {}) {
 
   function getState(tableName, columns) {
     if (!tableState.has(tableName)) {
-      // 始终用 outputPath 作为目录（单表时收尾再 rename）
-      const { writer, filePath } = openWriter(tableName, 1, columns, outputPath)
+      const { writer, filePath } = openWriter(tableName, 1, columns, outputDir)
       tableState.set(tableName, { writer, filePath, sheetRows: 0, sheetIndex: 1, columns })
     }
     return tableState.get(tableName)
@@ -435,7 +464,7 @@ async function sqlToCsvStream(inputPath, outputPath, options = {}) {
       state.writer.end()
       state.sheetIndex++
       state.sheetRows = 0
-      const { writer, filePath } = openWriter(tableName, state.sheetIndex, state.columns, outputPath)
+      const { writer, filePath } = openWriter(tableName, state.sheetIndex, state.columns, outputDir)
       state.writer = writer
       state.filePath = filePath
     }
@@ -456,7 +485,8 @@ async function sqlToCsvStream(inputPath, outputPath, options = {}) {
     const match = INSERT_HDR_RE.exec(stmt)
     if (!match) return
 
-    const tableName = normalizeTableName(match[1])
+    // 保留完整表名（含 schema）作为 key，避免不同 schema 同名表数据合并
+    const tableName = match[1].replace(/`/g, '')
     const colStr = match[2] ?? ''
     const columns = colStr ? parseColumns(colStr) : []
     const valuesOffset = match.index + match[0].length

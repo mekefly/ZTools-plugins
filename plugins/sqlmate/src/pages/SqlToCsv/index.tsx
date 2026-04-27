@@ -27,8 +27,9 @@ export default function SqlToCsv({ enterAction }: { enterAction?: any }) {
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // xlsx 格式内存限制：XLSX 库必须全量构建 workbook，超过此大小会 OOM
-  const XLSX_MAX_BYTES = 200 * 1024 * 1024 // 200 MB
+  // xlsx 格式内存限制：文件读入 + 行数组 + XLSX workbook 约占 3-5 倍内存
+  // 50MB SQL ≈ 150-250MB 内存峰值，是 Electron 渲染进程安全上限
+  const XLSX_MAX_BYTES = 50 * 1024 * 1024 // 50 MB
 
   const canRun = !!sql || !!filePath
 
@@ -41,7 +42,7 @@ export default function SqlToCsv({ enterAction }: { enterAction?: any }) {
       if (format === 'xlsx' && filePath) {
         const fileSize = window.services.getFileSize(filePath)
         if (fileSize > XLSX_MAX_BYTES) {
-          setError(`文件过大（${formatBytes(fileSize)}），xlsx 格式最大支持 200MB。请改用 CSV 格式，CSV 支持任意大小文件。`)
+          setError(`文件过大（${formatBytes(fileSize)}），xlsx 格式最大支持 50MB。请改用 CSV 格式，CSV 支持任意大小文件且无行数限制。`)
           setProcessing(false)
           return
         }
