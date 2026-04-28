@@ -225,7 +225,7 @@ function compressSQL(sql, options) {
     const t = tokens[i]
     if (removeComments && (t.type === 'comment_line' || t.type === 'comment_block')) continue
 
-    const needSpace = result.length > 0 && !/[.(]$/.test(result) && t.type !== 'paren_close' && t.type !== 'comma' && t.type !== 'semicolon' && t.value !== '.'
+    const needSpace = result.length > 0 && !/[.(\s]$/.test(result) && t.type !== 'paren_close' && t.type !== 'comma' && t.type !== 'semicolon' && t.value !== '.'
     if (t.type === 'operator' && t.value === '.') { result = result.trimEnd() + '.'; continue }
     if (t.type === 'comma') { result = result.trimEnd() + ', '; continue }
     if (t.type === 'paren_open') { result = result.trimEnd() + '('; continue }

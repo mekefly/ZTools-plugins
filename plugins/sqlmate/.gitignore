@@ -4,9 +4,6 @@ node_modules/
 # Build output
 dist/
 
-# 但 vendor/dist 是 xlsx 的运行时依赖，必须跟踪
-!public/preload/vendor/dist/
-
 # Vite
 .vite/
 vite.config.js.timestamp-*

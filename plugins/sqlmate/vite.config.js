@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import fs from 'fs'
 import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -27,14 +28,23 @@ function stripDevConfig() {
       delete config.development
       writeFileSync(pluginJsonPath, JSON.stringify(config, null, 2), 'utf-8')
 
-      // 删除 dist/preload/node_modules —— ZTools 市场不提供 node_modules，
-      // 依赖已内联到 vendor/，node_modules 留在 dist 只会增大体积且无法使用
+      // 删除 dist/preload/node_modules —— ZTools 市场不分发 node_modules，
+      // xlsx 等依赖已内联到 lib/ 目录下
       const distNodeModules = resolve(__dirname, 'dist/preload/node_modules')
       rmSync(distNodeModules, { recursive: true, force: true })
-      // 同时删除 preload 的 package.json / package-lock.json（发布不需要）
-      rmSync(resolve(__dirname, 'dist/preload/package.json'), { force: true })
+      // 删除 package-lock.json（发布不需要）
       rmSync(resolve(__dirname, 'dist/preload/package-lock.json'), { force: true })
-      // vendor/ 由 Vite 自动从 public/ 复制到 dist/，无需手动处理
+      // 保留 package.json（声明 "type": "commonjs"，preload 层必须用 CJS）
+      // 但清理其中的 dependencies 字段
+      const preloadPkgPath = resolve(__dirname, 'dist/preload/package.json')
+      if (fs.existsSync(preloadPkgPath)) {
+        const pkg = JSON.parse(readFileSync(preloadPkgPath, 'utf-8'))
+        delete pkg.dependencies
+        writeFileSync(preloadPkgPath, JSON.stringify(pkg, null, 2), 'utf-8')
+      } else {
+        // preload/package.json 不存在时主动创建（声明 CJS 模式）
+        writeFileSync(preloadPkgPath, JSON.stringify({ type: 'commonjs' }, null, 2), 'utf-8')
+      }
     }
   }
 }

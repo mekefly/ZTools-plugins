@@ -6,7 +6,7 @@
 
 const fs   = require('node:fs')
 const path = require('node:path')
-const XLSX = require('../vendor/xlsx')
+const XLSX = require('./xlsx')
 const { splitStatements } = require('./segment')
 const { splitColumnList } = require('./dedupe')
 
